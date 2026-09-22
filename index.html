@@ -11,7 +11,7 @@
       <div class="grain" aria-hidden="true"></div>
       <header class="topbar">
         <a class="mark" href="/" aria-label="Blue Interface 首页"><span class="mark-dot"></span> BLUE / 01</a>
-        <div class="top-meta"><button id="voice-permission" type="button" hidden>允许麦克风 · 自动感知</button><span id="voice-error" role="status"></span><span>GLASS INTERFACE</span><span class="signal"><i></i> LIVE RENDER</span></div>
+        <div class="top-meta"><span id="voice-error" role="status"></span><span>GLASS INTERFACE</span><span class="signal"><i></i> LIVE RENDER</span></div>
       </header>
       <main class="dashboard" aria-label="Blue 大屏">
         <section class="hero" aria-labelledby="hero-title">
@@ -47,19 +47,13 @@
           <div class="hud-detail"><span>光照结构</span><strong>内置环形灯带</strong></div>
           <p class="telemetry-note">帧率由当前画面实时采样</p>
         </section>
-        <section class="voice-panel" id="voice-panel" data-state="idle" aria-label="实时语音识别">
-          <div class="voice-transcript" id="voice-transcript"></div>
+        <button id="voice-toggle" class="voice-toggle" type="button" aria-label="开始语音识别" aria-pressed="false"><span class="voice-toggle-dot" aria-hidden="true"></span><span id="voice-toggle-label">点击开始说话</span></button>
+        <section class="voice-panel" id="voice-panel" data-state="idle" aria-label="本次对话">
+          <div class="conversation-heading"><span>本次对话</span><span id="conversation-status" role="status"></span></div>
+          <div class="voice-transcript" id="voice-transcript" tabindex="0" role="region" aria-label="本次对话记录，可滚动查看历史"></div>
+          <button id="conversation-latest" type="button" hidden>回到最新 ↓</button>
           <span id="voice-announcement" class="sr-only" aria-live="polite"></span>
         </section>
-        <form class="tts-panel" id="tts-panel" aria-label="语音合成测试">
-          <label for="tts-text">语音合成 <span>TTS / STREAM</span></label>
-          <div class="tts-controls">
-            <input id="tts-text" name="text" maxlength="2000" autocomplete="off" value="你好，这是一条流式语音合成测试。" />
-            <button id="tts-speak" type="submit">播放</button>
-            <button id="tts-stop" type="button" disabled>停止</button>
-          </div>
-          <output id="tts-status" role="status">等待输入</output>
-        </form>
         <div class="specimen-label"><span>01 / OPTICAL CORE</span><small>REFRACTIVE GLASS · INNER LIGHT CHANNEL</small></div>
       </main>
       <footer class="footer"><span>BLUE / ORBITAL SYSTEM</span><span class="footer-center">WEBGL · REALTIME</span><span>LOCAL <time id="local-time">—</time></span></footer>

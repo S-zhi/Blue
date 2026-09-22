@@ -34,5 +34,6 @@ const server = createServer((request, response) => {
 bridge = attachVoiceServer(server, getConfig());
 agentPlatform = createAgentPlatform(getAgentConfig());
 const port = Number(process.env.PORT || 3000);
-server.listen(port, '127.0.0.1', () => console.log(`BLUE + ASR + TTS + Agent/MCP listening on http://127.0.0.1:${port}`));
+const host = process.env.HOST || '127.0.0.1';
+server.listen(port, host, () => console.log(`BLUE + ASR + TTS + Agent/MCP listening on http://${host}:${port}`));
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { bridge.close(); server.close(); });

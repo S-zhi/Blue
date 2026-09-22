@@ -64,29 +64,40 @@ test('an upstream failure appears as an error subtitle and does not block the ne
   conversation.dispose();
 });
 
-test('subtitles reveal graphemes progressively and remain for thirty seconds after completion', t => {
+test('subtitle history persists for this session and updates each recognition entry in place', t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const output = [];
-  const writer = new SubtitleWriter((...args) => output.push(args), { interval: 10 });
+  const writer = new SubtitleWriter((...args) => output.push(args));
+  writer.show('你好', 'user');
+  writer.show('你们好', 'user');
+  assert.equal(writer.entries.length, 1);
+  assert.equal(output.at(-1)[0], '你们好');
   writer.show('你好👨‍👩‍👧', 'assistant');
-  assert.deepEqual(output.at(-1), ['你', 'assistant', true]);
-  t.mock.timers.tick(10); assert.equal(output.at(-1)[0], '你好');
-  t.mock.timers.tick(10); assert.deepEqual(output.at(-1), ['你好👨‍👩‍👧', 'assistant', false]);
-  t.mock.timers.tick(29999); assert.equal(output.at(-1)[0], '你好👨‍👩‍👧');
-  t.mock.timers.tick(1); assert.equal(output.at(-1)[0], '');
-  writer.show('你好👨‍👩‍👧', 'assistant'); assert.equal(output.at(-1)[0], '');
-  writer.begin(); writer.show('你好👨‍👩‍👧', 'assistant'); assert.equal(output.at(-1)[0], '你');
-  writer.dispose();
+  t.mock.timers.tick(120000);
+  assert.equal(output.at(-1)[0], '你好👨‍👩‍👧');
+  writer.begin(); writer.show('你们好', 'user');
+  assert.deepEqual(writer.entries.map(item => item.text), ['你们好', '你好👨‍👩‍👧', '你们好']);
+  writer.dispose(); assert.equal(writer.entries.length, 0);
 });
 
-test('recognition revisions replace the changed suffix without stacking typing timers', t => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
-  let current;
-  const writer = new SubtitleWriter(text => { current = text; }, { interval: 10 });
-  writer.show('你好'); t.mock.timers.tick(10);
-  writer.show('你们好'); assert.equal(current, '你们');
-  t.mock.timers.tick(10); assert.equal(current, '你们好');
-  writer.dispose();
+test('answers wait for audio captions, and playback failures still preserve the answer', async () => {
+  const output = [];
+  let play, finish;
+  const captions = { begin() {}, show: (text, role) => output.push({ text, role }), dispose() {} };
+  const conversation = new Conversation({ captions, request: async () => ({ output: '完整回答' }),
+    speak: (_text, options) => { play = options.onCaption; return new Promise(resolve => { finish = resolve; }); },
+  });
+  conversation.setMicrophone(false);
+  const pending = conversation.manual('问题');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(output, [{ text: '问题', role: 'user' }]);
+  play('完整'); assert.equal(output.at(-1).text, '完整');
+  finish(); await pending; assert.equal(output.at(-1).text, '完整回答');
+  conversation.speak = async () => { throw new Error('离线'); };
+  await conversation.manual('第二问');
+  assert.deepEqual(output.at(-2), { text: '完整回答', role: 'assistant' });
+  assert.match(output.at(-1).text, /离线/);
+  conversation.dispose();
 });
 
 test('interactive demo processes multiple requests and continues after a failed request', async () => {

@@ -1,4 +1,4 @@
-import { SubtitleWriter } from './subtitles.js';
+import { SubtitleWriter, mountCaptionHistory } from './subtitles.js';
 
 export async function requestAgent(input, signal) {
   const response = await fetch('/api/agent/run', {
@@ -12,7 +12,8 @@ export async function requestAgent(input, signal) {
 }
 
 export class Conversation {
-  constructor({ captions, request = requestAgent }) {
+  constructor({ captions, request = requestAgent, speak = null, onStatus = () => {} }) {
+    this.speak = speak; this.onStatus = onStatus;
     this.captions = captions; this.request = request; this.revision = 0;
     this.tail = Promise.resolve(); this.pending = 0; this.disposed = false;
     this.microphone = 'pending'; this.listeners = new Set();
@@ -27,7 +28,7 @@ export class Conversation {
   }
   beginVoice() {
     this.revision++; this.voiceSubmitted = false; this.voiceText = '';
-    this.captions.begin();
+    this.captions.begin(); this.onStatus('正在聆听');
   }
   voiceResult(result) {
     const text = typeof result.text === 'string' ? result.text.trim() : '';
@@ -52,6 +53,7 @@ export class Conversation {
       return Promise.resolve(false);
     }
     this.pending++;
+    this.onStatus('正在思考…');
     const task = async () => {
       if (this.disposed) return false;
       this.controller = new AbortController();
@@ -60,12 +62,31 @@ export class Conversation {
         const result = await this.request(text, this.controller.signal);
         const keys = (result.artifacts || []).filter(item => item.type === 'demo-secret' && typeof item.value === 'string');
         const answer = [result.output || '', ...keys.filter(item => !(result.output || '').includes(item.value)).map(item => `演示密钥：${item.value}`)].filter(Boolean).join('\n');
-        if (!this.disposed && revision === this.revision) this.captions.show(answer || '模型没有返回文字，请重试。', 'assistant');
+        if (!this.disposed && revision === this.revision) {
+          const reply = answer || '模型没有返回文字，请重试。';
+          if (!this.speak) this.captions.show(reply, 'assistant');
+          else {
+            this.onStatus('正在准备语音…');
+            try {
+              await this.speak(reply, { onCaption: text => {
+                if (!this.disposed && revision === this.revision) {
+                  this.onStatus('正在回答…'); this.captions.show(text, 'assistant', true);
+                }
+              } });
+              if (!this.disposed && revision === this.revision) this.captions.show(reply, 'assistant');
+            } catch (error) {
+              if (!this.disposed && revision === this.revision && error.code !== 'ABORTED') {
+                this.captions.show(reply, 'assistant');
+                this.captions.show(`语音播放失败：${error.message}`, 'error');
+              }
+            }
+          }
+        }
         return true;
       } catch (error) {
         if (!this.disposed && revision === this.revision) this.captions.show(error.name === 'AbortError' ? '执行等待超时，请稍后重试。' : `执行未完成：${error.message}`, 'error');
         return false;
-      } finally { clearTimeout(timer); this.controller = null; }
+      } finally { clearTimeout(timer); this.controller = null; if (revision === this.revision) this.onStatus(''); }
     };
     const running = this.tail.then(task).finally(() => { this.pending--; });
     this.tail = running.catch(() => {});
@@ -79,14 +100,22 @@ export function getConversation() {
   if (!shared) {
     const transcript = document.querySelector('#voice-transcript');
     const announcement = document.querySelector('#voice-announcement');
-    const captions = new SubtitleWriter((text, role, typing) => {
-      transcript.textContent = text;
-      transcript.dataset.role = role;
-      transcript.dataset.typing = String(typing);
-      transcript.scrollTop = transcript.scrollHeight;
-      if (!typing) announcement.textContent = text;
+    const history = mountCaptionHistory(transcript, announcement, document.querySelector('#conversation-latest'));
+    const captions = new SubtitleWriter((...args) => {
+      const app = document.querySelector('#app');
+      if (!app.classList.contains('has-conversation')) {
+        app.classList.add('has-conversation');
+        window.dispatchEvent(new Event('conversation:layout'));
+      }
+      history.render(...args);
     });
-    shared = new Conversation({ captions });
+    const dispose = captions.dispose.bind(captions);
+    captions.dispose = () => { dispose(); history.dispose(); };
+    shared = new Conversation({
+      captions,
+      speak: (text, options) => window.blueTts.speak(text, options),
+      onStatus: text => { document.querySelector('#conversation-status').textContent = text; },
+    });
   }
   return shared;
 }

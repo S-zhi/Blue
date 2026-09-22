@@ -1,6 +1,5 @@
 import workletUrl from './pcm-worklet.js?worker&url';
 import { Packetizer, VoiceActivityDetector } from './audio-core.js';
-import { TranscriptDeadline } from './timing.js';
 
 export class SpeechSession {
   constructor({ onState, onLevel, onSpeech, onResult, onError, onCountdown = () => {}, onGesture = () => {}, onMicrophone = () => {} }) {
@@ -13,9 +12,8 @@ export class SpeechSession {
   async start() {
     if (this.active) return;
     const token = ++this.generation;
-    this.finishSent = false;
+    this.finishSent = false; this.stopRequested = false;
     this.detector = new VoiceActivityDetector();
-    this.deadline = new TranscriptDeadline(() => this.stop());
     this.preRoll = [];
     this.change('requesting');
     this.abortController = new AbortController();
@@ -97,12 +95,11 @@ export class SpeechSession {
           clearTimeout(this.connectTimer);
           for (const pcm of this.preRoll) this.packetizer.push(pcm);
           this.preRoll = [];
-          this.deadline.start();
+          if (this.stopRequested) { this.finish(token); return; }
           this.onSpeech(this.detector.speaking);
           this.change('listening');
           this.recordingTimer = setTimeout(() => this.stop(), Math.min(message.maxRecordingMs || 120000, 120000));
         } else if (message.type === 'result') {
-          this.deadline.update(message.text);
           this.onResult(message);
           if (message.final) this.complete();
         } else if (message.type === 'error') {
@@ -114,10 +111,13 @@ export class SpeechSession {
   }
   stop() {
     if (!this.active || this.state === 'finalizing') return;
-    if (['armed', 'requesting', 'connecting'].includes(this.state)) {
+    if (this.state === 'connecting') {
+      this.stopRequested = true; this.releaseMicrophone();
+      this.onSpeech(false); this.onLevel(0); this.change('finalizing'); return;
+    }
+    if (['armed', 'requesting'].includes(this.state)) {
       ++this.generation; this.clean(); this.change('idle'); return;
     }
-    this.deadline.clear();
     this.change('finalizing'); this.onSpeech(false); this.onLevel(0);
     this.onCountdown(null);
     clearTimeout(this.recordingTimer);
@@ -150,7 +150,6 @@ export class SpeechSession {
     this.node = null; this.source = null; this.mute = null; this.stream = null; this.context = null;
   }
   clean() {
-    this.deadline?.clear();
     for (const timer of ['healthTimer', 'connectTimer', 'recordingTimer', 'flushTimer', 'finalTimer']) clearTimeout(this[timer]);
     this.abortController?.abort(); this.abortController = null;
     this.releaseMicrophone();

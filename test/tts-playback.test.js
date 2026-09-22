@@ -17,7 +17,7 @@ class AudioContext {
   }
 }
 
-const health = { configured: true, format: 'pcm', sampleRate: 24000, protocolVersion: 'bidirectional-v3.2' };
+const health = { configured: true, format: 'pcm', sampleRate: 24000, protocolVersion: 'bidirectional-v3.3' };
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function setup(t, options = {}) {
   const events = [], sockets = [], contexts = [];
@@ -142,4 +142,80 @@ test('large multibyte text stays below WebSocket per-message limits', async t =>
   assert.equal(chunks.map(message => message.text).join(''), text);
   assert.ok(chunks.every(message => Buffer.byteLength(JSON.stringify(message)) < 32768));
   session.stop(); await rejected;
+});
+
+test('captions follow the audio clock, including delayed PCM and network gaps', async t => {
+  const { session, sockets, contexts } = setup(t);
+  const captions = [];
+  const pending = session.speak('你好世界', { onCaption: text => captions.push(text) });
+  await tick(); const socket = sockets[0]; ready(socket);
+  // First second of PCM arrives before its timestamp packet and must wait.
+  const second = new Array(48000).fill(64);
+  socket.pcm(second);
+  assert.equal(contexts[0].sources.length, 0);
+  socket.json({ type: 'subtitle', payload: { words: [
+    { word: '你好', startTime: 0, endTime: 1 },
+  ] } });
+  assert.equal(contexts[0].sources.length, 1);
+  assert.deepEqual(captions, []);
+  contexts[0].currentTime = .1;
+  await new Promise(resolve => setTimeout(resolve, 35));
+  assert.deepEqual(captions, ['你好']);
+  contexts[0].sources[0].end(); contexts[0].currentTime = 4;
+  socket.json({ type: 'subtitle', payload: { words: [
+    { word: '世界', startTime: 1, endTime: 2 },
+  ] } });
+  socket.pcm(second);
+  await new Promise(resolve => setTimeout(resolve, 35));
+  assert.equal(captions.at(-1), '你好');
+  contexts[0].currentTime = 4.1;
+  await new Promise(resolve => setTimeout(resolve, 35));
+  assert.equal(captions.at(-1), '你好世界');
+  socket.json({ type: 'done', audioBytes: 96000 });
+  contexts[0].sources[1].end(); await pending;
+});
+
+test('untimed voices display text only when the buffered audio starts; cancellation clears timers', async t => {
+  const { session, sockets, contexts } = setup(t); const captions = [];
+  const rejected = assert.rejects(session.speak('无时间戳', { onCaption: text => captions.push(text) }), { code: 'ABORTED' });
+  await tick(); ready(sockets[0]); sockets[0].pcm([0, 64]);
+  sockets[0].json({ type: 'done', audioBytes: 2 });
+  assert.deepEqual(captions, []);
+  contexts[0].currentTime = .04;
+  await new Promise(resolve => setTimeout(resolve, 35));
+  assert.deepEqual(captions, ['无时间戳']);
+  session.stop(); await rejected;
+  await new Promise(resolve => setTimeout(resolve, 35));
+  assert.equal(captions.length, 1);
+});
+
+test('a context unlocked by the original click is reused after the Agent responds', async t => {
+  const { session, contexts } = setup(t);
+  await session.unlock(); await tick();
+  const rejected = assert.rejects(session.speak('回答'), { code: 'ABORTED' });
+  await tick(); assert.equal(contexts.length, 1);
+  session.stop(); await rejected;
+});
+
+test('sentence-only voices release each sentence at its PCM boundary', async t => {
+  const { session, sockets, contexts } = setup(t); const captions = [];
+  const pending = session.speak('第一句。第二句。', { onCaption: text => captions.push(text) });
+  await tick(); const socket = sockets[0]; ready(socket);
+  socket.json({ type: 'sentence', boundary: 'start', text: '第一句。', audioBytes: 0 });
+  socket.pcm(new Array(48000).fill(64));
+  assert.equal(contexts[0].sources.length, 0);
+  socket.json({ type: 'sentence', boundary: 'end', text: '', audioBytes: 48000 });
+  assert.equal(contexts[0].sources.length, 1);
+  contexts[0].currentTime = .1;
+  await new Promise(resolve => setTimeout(resolve, 35));
+  assert.deepEqual(captions, ['第一句。']);
+  socket.json({ type: 'sentence', boundary: 'start', text: '第二句。', audioBytes: 48000 });
+  socket.pcm(new Array(48000).fill(64));
+  socket.json({ type: 'sentence', boundary: 'end', text: '', audioBytes: 96000 });
+  socket.json({ type: 'done', audioBytes: 96000 });
+  assert.equal(captions.at(-1), '第一句。');
+  contexts[0].currentTime = 1.1;
+  await new Promise(resolve => setTimeout(resolve, 35));
+  assert.equal(captions.at(-1), '第一句。第二句。');
+  contexts[0].sources.forEach(source => source.end()); await pending;
 });

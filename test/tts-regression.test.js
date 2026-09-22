@@ -109,3 +109,15 @@ test('audio for another session cannot leak into this playback', t => {
   assert.equal(json(client).at(-1).code, 'PROTOCOL_ERROR');
   assert.equal(client.sent.filter(Buffer.isBuffer).length, 0);
 });
+
+test('sentence boundaries carry PCM offsets so captions do not depend on packet arrival time', t => {
+  const { client, upstream, id } = setup(t);
+  client.emit('message', Buffer.from('{"type":"text","text":"你好。"}'), false);
+  upstream.emit('message', frame(350, { text: '你好。' }, id), true);
+  upstream.emit('message', frame(352, Buffer.from([0, 64, 0, 64]), id, 11, 0), true);
+  upstream.emit('message', frame(351, {}, id), true);
+  assert.deepEqual(json(client).filter(message => message.type === 'sentence'), [
+    { type: 'sentence', boundary: 'start', text: '你好。', audioBytes: 0 },
+    { type: 'sentence', boundary: 'end', text: '', audioBytes: 4 },
+  ]);
+});

@@ -24,6 +24,8 @@ function dismiss() { dialog.close(); }
 async function submit(event) {
   event.preventDefault();
   if (sending || !input.value.trim() || conversation.microphone !== 'unavailable') return;
+  window.blueTts?.stop();
+  window.blueTts?.unlock();
   const question = input.value.trim();
   input.value = ''; sending = true; send.disabled = true;
   status.textContent = '正在执行，回答将显示在字幕区。';

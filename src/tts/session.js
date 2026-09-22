@@ -1,5 +1,7 @@
+import { AudioCaptions } from './captions.js';
+
 const SAMPLE_RATES = new Set([8000, 16000, 22050, 24000, 32000, 44100, 48000]);
-const PROTOCOL_VERSION = 'bidirectional-v3.2';
+const PROTOCOL_VERSION = 'bidirectional-v3.3';
 
 function failure(code, message) { return Object.assign(new Error(message), { code }); }
 
@@ -7,6 +9,7 @@ export class PcmStreamPlayer {
   constructor(context, sampleRate) {
     this.context = context; this.sampleRate = sampleRate;
     this.nextStart = context.currentTime + 0.04;
+    this.schedule = [];
     this.sources = new Set(); this.carry = null; this.bytes = 0;
     this.samples = 0; this.peak = 0; this.drainResolve = null;
   }
@@ -28,6 +31,7 @@ export class PcmStreamPlayer {
       const sample = view.getInt16(index * 2, true) / 32768;
       channel[index] = sample; this.peak = Math.max(this.peak, Math.abs(sample));
     }
+    const offset = this.samples / this.sampleRate;
     this.samples += samples;
     const source = this.context.createBufferSource();
     source.buffer = audio; source.connect(this.context.destination);
@@ -36,8 +40,19 @@ export class PcmStreamPlayer {
       if (!this.sources.size) { this.drainResolve?.(); this.drainResolve = null; }
     };
     const start = Math.max(this.context.currentTime + 0.02, this.nextStart);
+    this.schedule.push({ start, offset, duration: audio.duration });
     this.sources.add(source);
     source.start(start); this.nextStart = start + audio.duration;
+  }
+  get playedSeconds() {
+    const now = this.context.currentTime;
+    if (!this.schedule.length || now < this.schedule[0].start) return null;
+    let position = 0;
+    for (const part of this.schedule) {
+      if (now < part.start) break;
+      position = part.offset + Math.min(Math.max(0, part.duration - 1 / this.sampleRate), now - part.start);
+    }
+    return position;
   }
   drain() {
     if (this.carry !== null) throw failure('INVALID_AUDIO', '收到的音频数据不完整。');
@@ -66,20 +81,28 @@ export class TtsSession {
     location = globalThis.location,
     timeoutMs = 15000,
   } = {}) {
-    Object.assign(this, { onProgress, fetch, AudioContext, WebSocket, location, timeoutMs });
+    Object.assign(this, { onProgress, AudioContext, WebSocket, location, timeoutMs });
+    // Native browser fetch requires Window as its receiver, not TtsSession.
+    this.fetch = fetch.bind(globalThis);
     this.run = null;
   }
-  speak(text) {
+  unlock() {
+    if (!this.AudioContext) return Promise.reject(failure('AUDIO_UNSUPPORTED', '当前浏览器不支持音频播放。'));
+    if (!this.preparedContext || this.preparedContext.state === 'closed') this.preparedContext = new this.AudioContext({ latencyHint: 'interactive' });
+    return this.preparedContext.resume();
+  }
+  speak(text, { onCaption } = {}) {
     if (typeof text !== 'string' || !text.trim()) return Promise.reject(failure('INVALID_TEXT', '待合成文本不能为空。'));
     if ([...text].length > 20000) return Promise.reject(failure('TEXT_LIMIT', '待合成文本超过单次会话限制。'));
     this.stop();
     return new Promise((resolve, reject) => {
-      const run = { abort: new AbortController(), finished: false, providerDone: false };
+      const run = { abort: new AbortController(), finished: false, providerDone: false, receivedBytes: 0, releasedBytes: 0, pending: [], captions: new AudioCaptions(text) };
+      const synchronized = typeof onCaption === 'function';
       this.run = run;
       const current = () => this.run === run && !run.finished;
       const finish = error => {
         if (run.finished) return;
-        run.finished = true; clearTimeout(run.timer); run.abort.abort();
+        run.finished = true; clearTimeout(run.timer); clearInterval(run.captionTimer); run.abort.abort();
         if (run.socket) {
           run.socket.onmessage = null; run.socket.onerror = null; run.socket.onclose = null;
           if (run.socket.readyState < 2) run.socket.close();
@@ -103,12 +126,31 @@ export class TtsSession {
         clearTimeout(run.timer); run.timer = setTimeout(() => finish(failure(code, message)), ms);
       };
       const progress = (stage, details = {}) => { if (current()) this.onProgress({ stage, ...details }); };
+      const updateCaption = () => {
+        if (!current() || !synchronized || !run.player) return;
+        const caption = run.captions.at(run.player.playedSeconds);
+        if (caption && caption !== run.lastCaption) { run.lastCaption = caption; onCaption(caption); }
+      };
+      const flushAudio = () => {
+        // Subtitle packets may arrive after PCM. Hold each sentence until its
+        // timing is available, rather than displaying captions late or guessing.
+        const limit = run.providerDone || !synchronized ? Infinity : Math.ceil(run.captions.end * run.player.sampleRate) * 2;
+        while (run.pending.length && run.releasedBytes < limit) {
+          const bytes = run.pending[0];
+          const length = Math.min(bytes.length, limit - run.releasedBytes);
+          run.player.append(bytes.slice(0, length).buffer);
+          run.releasedBytes += length;
+          if (length === bytes.length) run.pending.shift();
+          else run.pending[0] = bytes.subarray(length);
+        }
+      };
       const connect = async () => {
         try {
           if (!this.AudioContext) throw failure('AUDIO_UNSUPPORTED', '当前浏览器不支持音频播放。');
           // Execute inside the trusted click, before ANY network await. Use the
           // device rate for the context and the provider PCM rate for buffers.
-          run.context = new this.AudioContext({ latencyHint: 'interactive' });
+          run.context = this.preparedContext || new this.AudioContext({ latencyHint: 'interactive' });
+          this.preparedContext = null;
           deadline('PLAYBACK_BLOCKED', '浏览器未允许音频播放，请再次点击播放。');
           const resume = run.context.resume();
           progress('unlocking');
@@ -129,6 +171,7 @@ export class TtsSession {
           if (health.protocolVersion !== PROTOCOL_VERSION) throw failure('SERVER_OUTDATED', '语音服务仍在运行旧版本，请重启 npm start 后刷新页面。');
           if (health.format !== 'pcm' || !SAMPLE_RATES.has(health.sampleRate)) throw failure('INVALID_FORMAT', '语音服务返回了不支持的音频格式。');
           run.player = new PcmStreamPlayer(run.context, health.sampleRate);
+          if (synchronized) run.captionTimer = setInterval(updateCaption, 25);
           const url = new URL('/api/tts', this.location.href); url.protocol = this.location.protocol === 'https:' ? 'wss:' : 'ws:';
           const socket = new this.WebSocket(url); socket.binaryType = 'arraybuffer'; run.socket = socket;
           deadline('CONNECT_TIMEOUT', '语音合成连接超时。');
@@ -138,7 +181,9 @@ export class TtsSession {
             try {
               if (event.data instanceof ArrayBuffer) {
                 if (!ready || run.providerDone) throw failure('PROTOCOL_ERROR', '音频返回顺序错误。');
-                run.player.append(event.data);
+                run.receivedBytes += event.data.byteLength;
+                if (run.receivedBytes > health.sampleRate * 2 * 120) throw failure('AUDIO_LIMIT', '合成音频超过两分钟限制。');
+                run.pending.push(new Uint8Array(event.data)); flushAudio();
                 deadline('AUDIO_TIMEOUT', '音频流中断，请重新播放。', 30000);
                 progress('playing', { audioBytes: run.player.bytes });
                 return;
@@ -157,13 +202,22 @@ export class TtsSession {
                 socket.send(JSON.stringify({ type: 'finish' }));
                 progress('synthesizing');
                 deadline('AUDIO_TIMEOUT', '云端尚未返回音频，请检查音色和模型配置。', 30000);
+              } else if (message.type === 'sentence') {
+                if (!ready || run.providerDone) throw failure('PROTOCOL_ERROR', '句子返回顺序错误。');
+                run.captions.sentence(message, health.sampleRate); flushAudio(); updateCaption();
+                deadline('AUDIO_TIMEOUT', '音频流中断，请重新播放。', 30000);
+              } else if (message.type === 'subtitle') {
+                if (!ready || run.providerDone) throw failure('PROTOCOL_ERROR', '字幕返回顺序错误。');
+                run.captions.add(message.payload); flushAudio(); updateCaption();
+                deadline('AUDIO_TIMEOUT', '音频流中断，请重新播放。', 30000);
               } else if (message.type === 'done') {
                 if (!ready || run.providerDone) throw failure('PROTOCOL_ERROR', '语音合成结束事件顺序错误。');
-                if (message.audioBytes !== run.player.bytes) throw failure('INVALID_AUDIO', '音频接收不完整，请重新播放。');
+                if (message.audioBytes !== run.receivedBytes) throw failure('INVALID_AUDIO', '音频接收不完整，请重新播放。');
                 run.providerDone = true;
+                flushAudio();
                 const draining = run.player.drain();
                 deadline('PLAYBACK_TIMEOUT', '音频播放未完成，请检查浏览器音频权限。', Math.max(5000, (run.player.nextStart - run.context.currentTime) * 1000 + 5000));
-                draining.then(() => { if (current()) finish(); }, finish);
+                draining.then(() => { if (current()) { if (synchronized) onCaption(text); finish(); } }, finish);
               } else if (message.type === 'error') {
                 finish(failure(typeof message.code === 'string' ? message.code : 'TTS_ERROR', message.message || '语音合成失败。'));
               } else if (message.type === 'canceled') {
@@ -179,4 +233,8 @@ export class TtsSession {
     });
   }
   stop() { this.run?.cancel(); }
+  dispose() {
+    this.stop();
+    this.preparedContext?.close().catch(() => {}); this.preparedContext = null;
+  }
 }

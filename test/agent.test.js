@@ -40,7 +40,7 @@ test('agent rejects attempts to call tools outside the MCP gateway', async () =>
 test('custom model provider uses Responses API by default and translates MCP function calls', async () => {
   let request;
   const provider = new OpenAICompatibleProvider({
-    apiKey: 'test-api-key', baseUrl: 'https://api.adjez.sbs/v1', model: 'gpt-5.6-terra',
+    apiKey: 'test-api-key', baseUrl: 'https://api.deepseek.com', model: 'deepseek-flash',
     fetchImpl: async (url, init) => {
       request = { url, init };
       return new Response(JSON.stringify({ output: [{ type: 'function_call', call_id: 'call_1', name: 'mcp', arguments: '{"action":"list_tools"}' }] }), {
@@ -50,10 +50,10 @@ test('custom model provider uses Responses API by default and translates MCP fun
   });
   const message = await provider.complete({ messages: [{ role: 'user', content: 'hi' }], tools: [MCP_GATEWAY_TOOL] });
   assert.equal(message.tool_calls[0].function.name, 'mcp');
-  assert.equal(request.url, 'https://api.adjez.sbs/v1/responses');
+  assert.equal(request.url, 'https://api.deepseek.com/responses');
   assert.equal(request.init.headers.authorization, 'Bearer test-api-key');
   const body = JSON.parse(request.init.body);
-  assert.equal(body.model, 'gpt-5.6-terra');
+  assert.equal(body.model, 'deepseek-flash');
   assert.equal(body.tools[0].name, 'mcp');
   assert.equal(body.tools[0].strict, false);
   assert.equal(body.input[0].role, 'user');
@@ -115,8 +115,8 @@ test('custom model provider retains optional Chat Completions compatibility', as
 
 test('agent configuration uses requested defaults without exposing API key through other fields', () => {
   const config = getAgentConfig({ ASXS_CODE_API_KEY: 'secret-key' });
-  assert.equal(config.baseUrl, 'https://api.adjez.sbs/v1');
-  assert.equal(config.model, 'gpt-5.6-terra');
+  assert.equal(config.baseUrl, 'https://api.deepseek.com');
+  assert.equal(config.model, 'deepseek-flash');
   assert.equal(config.apiStyle, 'responses');
   assert.equal(config.apiKey, 'secret-key');
   assert.ok(!JSON.stringify({ ...config, apiKey: undefined }).includes('secret-key'));

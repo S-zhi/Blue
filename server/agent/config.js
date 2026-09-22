@@ -1,5 +1,5 @@
-const DEFAULT_BASE_URL = 'https://api.adjez.sbs/v1';
-const DEFAULT_MODEL = 'gpt-5.6-terra';
+const DEFAULT_BASE_URL = 'https://api.deepseek.com';
+const DEFAULT_MODEL = 'deepseek-flash';
 
 function normalizeBaseUrl(value) {
   const url = new URL(value || DEFAULT_BASE_URL);

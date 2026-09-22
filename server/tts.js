@@ -4,7 +4,7 @@ import { decodeTtsResponse, encodeTtsEvent, TTS_EVENT } from './tts-protocol.js'
 
 const MAX_BUFFER = 256 * 1024;
 const MAX_TEXT_CHARS = 20000;
-export const TTS_PROTOCOL_VERSION = 'bidirectional-v3.2';
+export const TTS_PROTOCOL_VERSION = 'bidirectional-v3.3';
 
 export function makeTtsRequest(config, event, sessionId, text = '') {
   return {
@@ -166,6 +166,13 @@ export function startTtsSession(client, config, connect) {
         client.send(frame.payload, { binary: true });
       }
       return;
+    }
+    if ([TTS_EVENT.TTS_SENTENCE_START, TTS_EVENT.TTS_SENTENCE_END].includes(frame.event)) {
+      return sendJson({
+        type: 'sentence', boundary: frame.event === TTS_EVENT.TTS_SENTENCE_START ? 'start' : 'end',
+        text: typeof frame.payloadJson?.text === 'string' ? frame.payloadJson.text : '',
+        audioBytes,
+      });
     }
     if (frame.event === TTS_EVENT.TTS_SUBTITLE) return sendJson({ type: 'subtitle', payload: frame.payloadJson || {} });
     if (frame.event === TTS_EVENT.SESSION_CANCELED) return finishClient({ type: 'canceled' });

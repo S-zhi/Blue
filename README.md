@@ -23,6 +23,24 @@ npm run build
 - `src/preview.js`: reusable state presets and opt-in interaction choices.
 - `src/style.css`: big-screen composition and reusable floating HUD styles.
 
+## Docker
+
+Build and run the frontend and Node BFF together:
+
+```bash
+docker build -t blue-orbit .
+docker run --rm --init -p 3000:3000 --env-file .env blue-orbit
+```
+
+Open `http://localhost:3000`. Supply service credentials through `.env` at runtime;
+environment files are excluded from the build context. Omit `--env-file .env`
+to run without service credentials. The container listens on `0.0.0.0:3000`
+and runs as the non-root `node` user.
+
+When deploying behind a domain, set `ASR_ALLOWED_ORIGINS` and
+`TTS_ALLOWED_ORIGINS` to the public origin (including scheme and port, if any).
+Use HTTPS for microphone access outside localhost.
+
 ## Streaming voice recognition
 
 The screen now includes an explicit microphone button, live transcription, and per-utterance acoustic estimates (age, voice-gender label, emotion, speaker). Local voice activity switches the ring between flow and pulse. A same-origin BFF reads `DOUBAO_API_KEY` from `.env`; credentials never enter the browser.

@@ -7,7 +7,7 @@
 默认模型配置为：
 
 - Base URL：`https://api.adjez.sbs/v1`
-- Model：`gpt-5.6-terra`
+- Model：`deepseek-flash`
 - Key：服务端环境变量 `ASXS_CODE_API_KEY`
 - API 形态：默认 OpenAI-compatible Responses API `POST /responses`；可用 `AGENT_MODEL_API=chat-completions` 切换至 `POST /chat/completions`
 

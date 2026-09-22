@@ -152,13 +152,27 @@ function resize() {
   // Keep the complete ring in frame, including portrait layouts.
   camera.position.z = Math.max(9.5, 2.35 / (Math.tan(THREE.MathUtils.degToRad(19)) * camera.aspect));
   ring.position.set(width <= 760 ? 0 : .34, width <= 760 ? 1.95 : 0, 0);
+  const chatting = document.querySelector('#app').classList.contains('has-conversation');
+  ring.scale.setScalar(chatting ? .42 : 1);
+  if (chatting) {
+    const halfHeight = camera.position.z * Math.tan(THREE.MathUtils.degToRad(19));
+    ring.position.y = halfHeight * (width <= 760 ? .64 : .56);
+  }
   camera.updateProjectionMatrix();
+  camera.updateMatrixWorld();
+  const center = ring.position.clone().project(camera);
+  const edge = ring.position.clone().add(new THREE.Vector3(1.3 * ring.scale.x, 0, 0)).project(camera);
+  const control = document.querySelector('#voice-toggle');
+  control.style.left = `${(center.x + 1) * width / 2}px`;
+  control.style.top = `${(1 - center.y) * height / 2}px`;
+  control.style.width = control.style.height = `${(edge.x - center.x) * width}px`;
   backgroundUniforms.uAspect.value = camera.aspect;
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
   particleUniforms.uPixelRatio.value = renderer.getPixelRatio();
   renderer.setSize(width, height);
 }
 addEventListener('resize', resize);
+addEventListener('conversation:layout', resize);
 resize();
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const clock = new THREE.Clock();
@@ -238,6 +252,7 @@ if (import.meta.hot) import.meta.hot.dispose(() => {
   frameHistory.replaceChildren();
   window.removeEventListener('ring:set-state', handleStateChange);
   removeEventListener('resize', resize);
+  removeEventListener('conversation:layout', resize);
   scene.traverse(object => {
     object.geometry?.dispose();
     if (Array.isArray(object.material)) object.material.forEach(material => material.dispose());

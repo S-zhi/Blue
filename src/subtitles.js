@@ -1,29 +1,48 @@
-// Shared renderer for recognition text and Agent answers. No audio or API calls.
+// In-memory subtitles: one entry per speaker/turn, retained until this page closes.
+// Recognition updates arrive immediately; assistant updates come from the audio clock.
 export class SubtitleWriter {
-  constructor(render, { interval = 24, hold = 30000 } = {}) {
-    this.render = render; this.interval = interval; this.hold = hold;
-    this.characters = []; this.shown = []; this.role = ''; this.target = null;
-    this.segmenter = new Intl.Segmenter('zh', { granularity: 'grapheme' });
+  constructor(render) {
+    this.render = render; this.entries = []; this.active = null; this.nextId = 0;
   }
-  begin() { this.target = null; }
-  show(text, role = 'user') {
-    if (!text || (text === this.target && role === this.role)) return;
-    clearTimeout(this.timer); clearTimeout(this.expiry);
-    const next = Array.from(this.segmenter.segment(text), item => item.segment);
-    let prefix = 0;
-    if (this.target !== null && this.role === role) {
-      while (prefix < this.shown.length && this.shown[prefix] === next[prefix]) prefix++;
+  begin() { this.active = null; }
+  show(text, role = 'user', speaking = false) {
+    if (!text) return;
+    if (!this.active || this.active.role !== role) {
+      this.active = { id: ++this.nextId, role, text: '' };
+      this.entries.push(this.active);
     }
-    this.target = text; this.role = role; this.characters = next;
-    this.shown = next.slice(0, prefix);
-    const tick = () => {
-      if (this.shown.length < this.characters.length) this.shown.push(this.characters[this.shown.length]);
-      const typing = this.shown.length < this.characters.length;
-      this.render(this.shown.join(''), this.role, typing);
-      if (typing) this.timer = setTimeout(tick, this.interval);
-      else this.expiry = setTimeout(() => this.render('', this.role, false), this.hold);
-    };
-    tick();
+    if (this.active.text === text && this.active.speaking === speaking) return;
+    Object.assign(this.active, { text, speaking });
+    this.render(text, role, speaking, this.active.id);
   }
-  dispose() { clearTimeout(this.timer); clearTimeout(this.expiry); }
+  dispose() { this.active = null; this.entries = []; }
+}
+
+export function mountCaptionHistory(transcript, announcement, latest) {
+  const nodes = new Map();
+  let following = true;
+  const atBottom = () => transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 48;
+  const onScroll = () => { following = atBottom(); latest.hidden = following; };
+  const toLatest = () => { following = true; transcript.scrollTop = transcript.scrollHeight; latest.hidden = true; };
+  transcript.addEventListener('scroll', onScroll);
+  latest.addEventListener('click', toLatest);
+  return {
+    render(text, role, speaking, id) {
+      let node = nodes.get(id);
+      if (!node) {
+        const message = document.createElement('article');
+        message.className = 'conversation-message'; message.dataset.role = role;
+        const label = document.createElement('small');
+        label.textContent = { user: '你', assistant: 'BLUE', error: '提示' }[role] || role;
+        node = document.createElement('p'); message.append(label, node);
+        transcript.append(message); nodes.set(id, node);
+      }
+      node.textContent = text;
+      node.parentElement.dataset.speaking = String(speaking);
+      if (following) toLatest();
+      else latest.hidden = false;
+      if (!speaking) announcement.textContent = text;
+    },
+    dispose() { transcript.removeEventListener('scroll', onScroll); latest.removeEventListener('click', toLatest); nodes.clear(); },
+  };
 }
