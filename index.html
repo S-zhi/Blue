@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BLUE // GLASS INTERFACE</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="scene" role="img" aria-label="正常状态的冰蓝玻璃圆环"></canvas>
+      <div class="grain" aria-hidden="true"></div>
+      <header class="topbar">
+        <a class="mark" href="/" aria-label="Blue Interface 首页"><span class="mark-dot"></span> BLUE / 01</a>
+        <div class="top-meta"><span>GLASS INTERFACE</span><span class="signal"><i></i> LIVE RENDER</span></div>
+      </header>
+      <main class="dashboard" aria-label="Blue 大屏">
+        <section class="hero" aria-labelledby="hero-title">
+          <div class="hud-eyebrow"><span></span> FIELD STUDY / 001</div>
+          <h1 id="hero-title">THE<br /><em>BLUE</em><br />RING</h1>
+          <p class="hero-tagline">光，由内而生。</p>
+          <p class="hero-description">A luminous interface for the space<br />between signal and silence.</p>
+          <div class="hero-rule" aria-hidden="true"><span></span><i></i></div>
+        </section>
+        <section class="hud-readout" id="side-readout" data-mode="render" aria-label="实时渲染信息">
+          <div class="readout-topline" aria-hidden="true"></div>
+          <div class="render-readout">
+          <div class="readout-label">实时帧率 <span>RENDER TELEMETRY</span></div>
+          <div class="readout-main"><span class="readout-chevron" aria-hidden="true"></span><strong id="render-fps">—</strong><span class="readout-unit">FPS</span></div>
+          <div class="status-readout">
+            <p>实时光学渲染</p>
+            <span>OPTICAL CORE / ONLINE</span>
+          </div>
+          <div class="frame-history" id="frame-history" aria-hidden="true"></div>
+          </div>
+          <div class="speech-readout" aria-label="语音特征估计">
+            <div class="readout-label">语音感知 <span>VOICE / PERCEPTION</span></div>
+            <div class="speech-emotion"><span>情绪估计</span><strong id="voice-emotion">—</strong></div>
+            <div class="speech-demographics">
+              <div><span>性别声线</span><strong id="voice-gender">—</strong></div>
+              <div><span>年龄估计</span><strong id="voice-age">—</strong></div>
+            </div>
+            <div class="hud-detail"><span>说话人</span><strong id="voice-speaker">—</strong></div>
+            <p class="speech-note">依据当前语音估计 · 仅供参考</p>
+          </div>
+          <div class="hud-detail"><span>运行时长</span><strong id="session-time">00:00:00</strong></div>
+          <div class="hud-detail"><span>核心材质</span><strong>光学玻璃</strong></div>
+          <div class="hud-detail"><span>光照结构</span><strong>内置环形灯带</strong></div>
+          <p class="telemetry-note">帧率由当前画面实时采样</p>
+        </section>
+        <section class="voice-panel" id="voice-panel" data-state="idle" aria-label="实时语音识别">
+          <div class="voice-header"><span class="voice-indicator" aria-hidden="true"></span><span id="voice-status" role="status">语音待命</span><span class="voice-protocol">VOICE / STREAM</span><time id="voice-duration">00:00</time></div>
+          <div class="voice-level" aria-hidden="true"><span></span></div>
+          <div class="voice-transcript empty" id="voice-transcript">开启语音，让想法实时浮现。</div>
+          <span id="voice-announcement" class="sr-only" aria-live="polite"></span>
+          <div class="voice-actions"><button type="button" id="voice-toggle" aria-pressed="false">开启语音</button><button type="button" id="voice-clear">清空字幕</button><span id="voice-countdown">静音 10 秒 · 自动结束</span></div>
+          <p class="voice-error" id="voice-error" role="alert"></p>
+          <p class="voice-notice">开启后音频发送至豆包，单次最长 2 分钟。停顿 10 秒自动结束，字幕保留 30 秒。</p>
+        </section>
+        <div class="specimen-label"><span>01 / OPTICAL CORE</span><small>REFRACTIVE GLASS · INNER LIGHT CHANNEL</small></div>
+      </main>
+      <footer class="footer"><span>BLUE / ORBITAL SYSTEM</span><span class="footer-center">WEBGL · REALTIME</span><span>LOCAL <time id="local-time">—</time></span></footer>
+      <div class="crosshair crosshair-a" aria-hidden="true"></div><div class="crosshair crosshair-b" aria-hidden="true"></div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

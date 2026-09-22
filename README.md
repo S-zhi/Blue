@@ -22,3 +22,9 @@ npm run build
 - `src/shaders.js`: internal light channel and animated background.
 - `src/preview.js`: reusable state presets and opt-in interaction choices.
 - `src/style.css`: big-screen composition and reusable floating HUD styles.
+
+## Streaming voice recognition
+
+The screen now includes an explicit microphone button, live transcription, and per-utterance acoustic estimates (age, voice-gender label, emotion, speaker). Local voice activity switches the ring between flow and pulse. A same-origin BFF reads `DOUBAO_API_KEY` from `.env`; credentials never enter the browser.
+
+See [docs/voice-asr.md](docs/voice-asr.md) for architecture, configuration, VAD thresholds, lifecycle, dependencies, and validation limits. `npm run dev` starts both the page and BFF; `npm run build && npm start` serves the built application with the BFF. The previous display and reusable HUD options remain available.
