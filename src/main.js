@@ -3,6 +3,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { surfaceVertex, lightChannelFragment, backgroundVertex, backgroundFragment, particleVertex, particleFragment } from './shaders.js';
 import { PRESETS, ACTIONS } from './preview.js';
 import { mountVoice } from './voice/index.js';
+import { mountTts } from './tts/index.js';
 import './style.css';
 
 const canvas = document.querySelector('#scene');
@@ -227,10 +228,12 @@ function animate() {
 }
 animate();
 const unmountVoice = mountVoice();
+const unmountTts = mountTts();
 // Vite reloads must not leave old WebGL render loops or GPU resources alive.
 if (import.meta.hot) import.meta.hot.dispose(() => {
   cancelAnimationFrame(frame);
   unmountVoice();
+  unmountTts();
   document.removeEventListener('visibilitychange', resetFrameSample);
   frameHistory.replaceChildren();
   window.removeEventListener('ring:set-state', handleStateChange);
