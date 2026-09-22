@@ -1,13 +1,13 @@
 import workletUrl from './pcm-worklet.js?worker&url';
 import { Packetizer, VoiceActivityDetector } from './audio-core.js';
-import { TurnEndDetector } from './timing.js';
+import { TranscriptDeadline } from './timing.js';
 
 export class SpeechSession {
-  constructor({ onState, onLevel, onSpeech, onResult, onError, onCountdown = () => {} }) {
-    Object.assign(this, { onState, onLevel, onSpeech, onResult, onError, onCountdown });
+  constructor({ onState, onLevel, onSpeech, onResult, onError, onCountdown = () => {}, onGesture = () => {}, onMicrophone = () => {} }) {
+    Object.assign(this, { onState, onLevel, onSpeech, onResult, onError, onCountdown, onGesture, onMicrophone });
     this.state = 'idle'; this.generation = 0;
   }
-  get active() { return ['requesting', 'connecting', 'listening', 'speaking', 'waiting', 'finalizing'].includes(this.state); }
+  get active() { return ['armed', 'requesting', 'connecting', 'listening', 'speaking', 'waiting', 'finalizing'].includes(this.state); }
   change(state) { this.state = state; this.onState(state); }
   current(token) { return token === this.generation; }
   async start() {
@@ -15,12 +15,14 @@ export class SpeechSession {
     const token = ++this.generation;
     this.finishSent = false;
     this.detector = new VoiceActivityDetector();
-    this.turnEnd = new TurnEndDetector();
+    this.deadline = new TranscriptDeadline(() => this.stop());
+    this.preRoll = [];
     this.change('requesting');
     this.abortController = new AbortController();
     this.healthTimer = setTimeout(() => this.abortController?.abort(), 8000);
     try {
       if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.AudioWorkletNode) {
+        this.onMicrophone(false);
         throw new Error('请使用支持 AudioWorklet 的浏览器，并通过 localhost 或 HTTPS 打开页面。');
       }
       const response = await fetch('/api/asr/health', { signal: this.abortController.signal, cache: 'no-store' });
@@ -34,9 +36,11 @@ export class SpeechSession {
       });
       if (!this.current(token)) { stream.getTracks().forEach(track => track.stop()); return; }
       this.stream = stream;
-      for (const track of stream.getTracks()) track.onended = () => this.fail('麦克风已断开或权限被撤销。');
+      this.onMicrophone(true);
+      for (const track of stream.getTracks()) track.onended = () => { this.onMicrophone(false); this.fail('麦克风已断开或权限被撤销。'); };
       const context = new AudioContext({ latencyHint: 'interactive' });
       this.context = context;
+      if (context.state === 'suspended') this.onGesture();
       await context.resume();
       await context.audioWorklet.addModule(workletUrl);
       if (!this.current(token)) return;
@@ -55,17 +59,30 @@ export class SpeechSession {
         if (!this.current(token)) return;
         if (event.data.type === 'flushed') return this.finish(token);
         if (event.data.type !== 'frame') return;
+        const activity = this.detector.update(event.data.rms, event.data.durationMs);
+        this.onLevel(activity.level);
+        if (this.state === 'armed' || this.state === 'connecting') {
+          this.preRoll.push(event.data.pcm);
+          if (this.state === 'armed' && this.preRoll.length > 25) this.preRoll.shift();
+          if (this.preRoll.length > 600) return this.fail('云端连接过慢，请稍后重试。');
+          if (this.state === 'armed' && activity.speaking) this.connect(token);
+          return;
+        }
         this.packetizer.push(event.data.pcm);
         if (!this.current(token) || this.state === 'finalizing') return;
-        const activity = this.detector.update(event.data.rms, event.data.durationMs);
-        const turn = this.turnEnd.update(event.data.rms, event.data.durationMs, activity);
-        this.onLevel(activity.level);
         if (activity.changed) this.onSpeech(activity.speaking);
-        this.onCountdown(turn.waiting ? Math.ceil(turn.remainingMs / 1000) : null);
-        if (turn.ended) return this.stop();
-        const nextState = activity.speaking ? 'speaking' : turn.waiting ? 'waiting' : 'listening';
+        const nextState = activity.speaking ? 'speaking' : 'listening';
         if (this.state !== nextState) this.change(nextState);
       };
+      this.source.connect(this.node); this.node.connect(this.mute); this.mute.connect(context.destination);
+      this.change('armed');
+    } catch (error) {
+      if (!this.current(token)) return;
+      if (['NotAllowedError', 'NotFoundError', 'NotReadableError', 'OverconstrainedError', 'SecurityError'].includes(error.name)) this.onMicrophone(false);
+      this.fail(error.name === 'NotAllowedError' ? '请在浏览器中允许麦克风权限。' : error.message || '无法启动语音感知。');
+    }
+  }
+  connect(token) {
       this.change('connecting');
       const url = new URL('/api/asr', location.href);
       url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -78,10 +95,14 @@ export class SpeechSession {
         try { message = JSON.parse(event.data); } catch { return this.fail('无法解析语音服务消息。'); }
         if (message.type === 'ready') {
           clearTimeout(this.connectTimer);
-          this.source.connect(this.node); this.node.connect(this.mute); this.mute.connect(context.destination);
+          for (const pcm of this.preRoll) this.packetizer.push(pcm);
+          this.preRoll = [];
+          this.deadline.start();
+          this.onSpeech(this.detector.speaking);
           this.change('listening');
           this.recordingTimer = setTimeout(() => this.stop(), Math.min(message.maxRecordingMs || 120000, 120000));
         } else if (message.type === 'result') {
+          this.deadline.update(message.text);
           this.onResult(message);
           if (message.final) this.complete();
         } else if (message.type === 'error') {
@@ -90,21 +111,13 @@ export class SpeechSession {
       };
       socket.onerror = () => { if (this.current(token)) this.fail('语音连接失败，请检查 BFF、密钥权限和网络。'); };
       socket.onclose = () => { if (this.current(token)) this.fail('语音连接提前关闭，当前字幕已保留。'); };
-    } catch (error) {
-      if (!this.current(token)) return;
-      const messages = {
-        NotAllowedError: '麦克风权限被拒绝，请允许权限后重试。',
-        NotFoundError: '未找到可用麦克风。', NotReadableError: '麦克风被其他应用占用或无法读取。',
-        AbortError: '语音服务检查超时，请检查网络。',
-      };
-      this.fail(messages[error.name] || error.message || '无法启动语音识别。');
-    }
   }
   stop() {
     if (!this.active || this.state === 'finalizing') return;
-    if (['requesting', 'connecting'].includes(this.state)) {
+    if (['armed', 'requesting', 'connecting'].includes(this.state)) {
       ++this.generation; this.clean(); this.change('idle'); return;
     }
+    this.deadline.clear();
     this.change('finalizing'); this.onSpeech(false); this.onLevel(0);
     this.onCountdown(null);
     clearTimeout(this.recordingTimer);
@@ -137,6 +150,7 @@ export class SpeechSession {
     this.node = null; this.source = null; this.mute = null; this.stream = null; this.context = null;
   }
   clean() {
+    this.deadline?.clear();
     for (const timer of ['healthTimer', 'connectTimer', 'recordingTimer', 'flushTimer', 'finalTimer']) clearTimeout(this[timer]);
     this.abortController?.abort(); this.abortController = null;
     this.releaseMicrophone();

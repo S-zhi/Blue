@@ -8,7 +8,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "node server/start.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "mcp:demo": "node server/mcp/demo.js",
+    "agent:demo": "node server/agent/demo.js",
+    "agent:check": "node server/agent/check.js"
   },
   "dependencies": {
     "three": "^0.167.1",

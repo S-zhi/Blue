@@ -4,14 +4,16 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { attachAsrServer } from './asr.js';
 import { getConfig } from './config.js';
+import { getAgentConfig } from './agent/config.js';
+import { createAgentPlatform } from './agent/platform.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 try { process.loadEnvFile(path.join(root, '.env')); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 const dist = path.join(root, 'dist');
 const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
-let bridge;
+let bridge, agentPlatform;
 const server = createServer((request, response) => {
-  bridge.middleware(request, response, async () => {
+  agentPlatform.middleware(request, response, () => bridge.middleware(request, response, async () => {
     if (!['GET', 'HEAD'].includes(request.method)) { response.writeHead(405); return response.end(); }
     try {
       const pathname = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
@@ -27,9 +29,10 @@ const server = createServer((request, response) => {
       response.setHeader('Cache-Control', file.endsWith('.html') ? 'no-cache' : 'public, max-age=3600');
       response.end(request.method === 'HEAD' ? undefined : body);
     } catch { response.writeHead(404); response.end('Not found'); }
-  });
+  }));
 });
 bridge = attachAsrServer(server, getConfig());
+agentPlatform = createAgentPlatform(getAgentConfig());
 const port = Number(process.env.PORT || 3000);
-server.listen(port, '127.0.0.1', () => console.log(`BLUE + ASR BFF listening on http://127.0.0.1:${port}`));
+server.listen(port, '127.0.0.1', () => console.log(`BLUE + ASR + Agent/MCP listening on http://127.0.0.1:${port}`));
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { bridge.close(); server.close(); });
