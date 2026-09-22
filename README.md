@@ -28,3 +28,7 @@ npm run build
 The screen now includes an explicit microphone button, live transcription, and per-utterance acoustic estimates (age, voice-gender label, emotion, speaker). Local voice activity switches the ring between flow and pulse. A same-origin BFF reads `DOUBAO_API_KEY` from `.env`; credentials never enter the browser.
 
 See [docs/voice-asr.md](docs/voice-asr.md) for architecture, configuration, VAD thresholds, lifecycle, dependencies, and validation limits. `npm run dev` starts both the page and BFF; `npm run build && npm start` serves the built application with the BFF. The previous display and reusable HUD options remain available.
+
+## Streaming voice synthesis
+
+The BFF also includes the bidirectional Doubao TTS protocol adapter and streams 24 kHz PCM to the browser. Configure `DOUBAO_TTS_SPEAKER`, then call `window.blueTts.speak(text)` from a user gesture. The TTS capability is intentionally standalone for now and is not automatically connected to the ASR loop. See [docs/voice-tts.md](docs/voice-tts.md).

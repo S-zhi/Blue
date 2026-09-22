@@ -8,7 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "node server/start.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "test:tts:live": "node scripts/tts-smoke.js",
+    "test:tts:play": "node scripts/tts-smoke.js --play"
   },
   "dependencies": {
     "three": "^0.167.1",

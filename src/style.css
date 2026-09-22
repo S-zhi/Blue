@@ -52,3 +52,17 @@
 .voice-panel[data-state="waiting"] #voice-countdown{color:#c8e6fb}
 .voice-panel[data-state="error"] .voice-indicator{background:#ffadae}
 @media(max-width:760px){.dashboard .hud-readout{top:850px}.speech-emotion{margin:20px 0}.speech-demographics{max-width:260px}.voice-actions>span{display:block;font-size:7px}.voice-panel{padding:14px 0}}
+
+/* Caption-only stage. */
+.voice-panel{width:min(1100px,78vw);bottom:8%;padding:0;pointer-events:none}
+.voice-transcript{text-align:center;max-height:140px;min-height:0;margin:0}
+#voice-permission{background:none;border:0;border-bottom:1px solid #79caff66;color:#a8d9f5;font:inherit;cursor:pointer;padding:4px}
+#voice-error{font-size:9px;color:#91aec2;max-width:300px}
+@media(max-width:760px){.voice-panel{top:620px;width:calc(100% - 48px)}.top-meta{gap:12px}#voice-error{max-width:140px}}
+
+/* Standalone TTS surface. Playback pauses microphone capture to prevent acoustic feedback. */
+.tts-panel{position:absolute;z-index:6;left:5vw;bottom:68px;width:min(410px,38vw);padding:12px 14px;border-left:1px solid #79caff55;background:#030a1394;backdrop-filter:blur(12px)}
+.tts-panel label{display:flex;justify-content:space-between;color:#b9ddf5;font-size:9px;letter-spacing:.12em}.tts-panel label span{color:#577b96;font-size:7px}
+.tts-controls{display:grid;grid-template-columns:1fr auto auto;gap:7px;margin-top:9px}.tts-controls input{min-width:0;border:0;border-bottom:1px solid #5d89a955;background:transparent;color:#e1f3ff;padding:7px 3px;font:11px 'PingFang SC','Microsoft YaHei',sans-serif;outline:none}.tts-controls input:focus{border-bottom-color:#91d3ff}.tts-controls button{border:1px solid #598caf66;background:transparent;color:#bfe6ff;padding:6px 10px;font-size:9px;cursor:pointer}.tts-controls button:disabled{opacity:.35;cursor:default}
+#tts-status{display:block;margin-top:8px;color:#66879f;font-size:8px}.tts-panel[data-state="playing"] #tts-status{color:#8ed4ff}.tts-panel[data-state="error"] #tts-status{color:#ffadae}
+@media(max-width:760px){.tts-panel{left:24px;right:24px;top:1010px;bottom:auto;width:auto}.tts-controls{grid-template-columns:1fr auto}.tts-controls #tts-stop{grid-column:2}.tts-controls input{grid-row:1 / span 2}}

@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { attachAsrServer } from './asr.js';
+import { attachVoiceServer } from './voice.js';
 import { getConfig } from './config.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -29,7 +29,7 @@ const server = createServer((request, response) => {
     } catch { response.writeHead(404); response.end('Not found'); }
   });
 });
-bridge = attachAsrServer(server, getConfig());
+bridge = attachVoiceServer(server, getConfig());
 const port = Number(process.env.PORT || 3000);
-server.listen(port, '127.0.0.1', () => console.log(`BLUE + ASR BFF listening on http://127.0.0.1:${port}`));
+server.listen(port, '127.0.0.1', () => console.log(`BLUE voice BFF listening on http://127.0.0.1:${port}`));
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { bridge.close(); server.close(); });

@@ -1,43 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { VoiceActivityDetector } from '../src/voice/audio-core.js';
-import { TurnEndDetector, CaptionRetention } from '../src/voice/timing.js';
+import { TranscriptDeadline, CaptionRetention } from '../src/voice/timing.js';
 
-function detector() {
-  const vad = new VoiceActivityDetector(), turn = new TurnEndDetector();
-  return (rms, count = 1) => {
-    let result;
-    for (let i = 0; i < count; i++) result = turn.update(rms, 20, vad.update(rms, 20));
-    return result;
-  };
-}
-
-test('initial silence and isolated clicks do not start the end-of-turn countdown', () => {
-  const feed = detector();
-  assert.equal(feed(0, 600).remainingMs, null);
-  feed(.1);
-  assert.equal(feed(0, 600).ended, false);
-  assert.equal(feed(0).remainingMs, null);
+test('no recognition content ends after ten seconds even if sound continues', t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let ended = 0; const deadline = new TranscriptDeadline(() => ended++);
+  deadline.start(); t.mock.timers.tick(9999); assert.equal(ended, 0);
+  deadline.update(''); t.mock.timers.tick(1); assert.equal(ended, 1);
 });
-
-test('turn ends exactly ten seconds after speech, including the VAD release delay', () => {
-  const feed = detector(); feed(.1, 3);
-  assert.equal(feed(0, 29).waiting, false);
-  assert.deepEqual(feed(0), { waiting: true, remainingMs: 9400, ended: false });
-  assert.equal(feed(0, 469).ended, false);
-  assert.equal(feed(0).ended, true);
+test('only changed text renews the deadline; duplicate hypotheses do not', t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let ended = 0; const deadline = new TranscriptDeadline(() => ended++);
+  deadline.start(); t.mock.timers.tick(9000); deadline.update('你好');
+  t.mock.timers.tick(9000); deadline.update('你好');
+  t.mock.timers.tick(1000); assert.equal(ended, 1);
 });
-
-test('sound at 9.98 seconds cancels confirmation immediately and restarts the quiet window', () => {
-  const feed = detector(); feed(.1, 3); feed(0, 499);
-  assert.deepEqual(feed(.1), { waiting: false, remainingMs: 10000, ended: false });
-  feed(.1, 2);
-  assert.equal(feed(0, 499).ended, false);
-  assert.equal(feed(0).ended, true);
-});
-
-test('sustained speech never ends automatically through the silence detector', () => {
-  assert.equal(detector()(.05, 2000).ended, false);
+test('revised text cancels pending end and cleanup cancels all timers', t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let ended = 0; const deadline = new TranscriptDeadline(() => ended++);
+  deadline.start(); deadline.update('你好'); t.mock.timers.tick(9999);
+  deadline.update('你好世界'); t.mock.timers.tick(9999); assert.equal(ended, 0);
+  deadline.clear(); t.mock.timers.tick(10000); assert.equal(ended, 0);
 });
 
 test('captions expire after 30 seconds; duplicate and final-only updates do not renew them', t => {

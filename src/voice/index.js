@@ -2,20 +2,18 @@ import { SpeechSession } from './session.js';
 import { CaptionRetention } from './timing.js';
 
 const EMOTIONS = { angry: '生气', happy: '开心', neutral: '平静', sad: '悲伤', surprise: '惊讶' };
-const STATES = {
-  idle: '语音待命', requesting: '准备麦克风…', connecting: '正在连接云端…',
-  listening: '正在聆听', speaking: '检测到声音', waiting: '等待继续说话', finalizing: '正在确认最终字幕…', done: '识别完成', error: '识别未完成',
-};
 export function mountVoice() {
   const panel = document.querySelector('#voice-panel');
-  const toggle = document.querySelector('#voice-toggle');
-  const status = document.querySelector('#voice-status');
+  const permission = document.querySelector('#voice-permission');
   const transcript = document.querySelector('#voice-transcript');
   const errorBox = document.querySelector('#voice-error');
-  const clear = document.querySelector('#voice-clear');
-  const elapsed = document.querySelector('#voice-duration');
+
   const sideReadout = document.querySelector('#side-readout');
-  const countdown = document.querySelector('#voice-countdown');
+  let disposed = false, retryTimer, emotion = 'neutral', speaking = false, blocked = false, ttsPlaying = false;
+  const foreground = () => document.visibilityState === 'visible' && document.hasFocus();
+  function updateRing() {
+    window.dispatchEvent(new CustomEvent('ring:set-state', { detail: { state: `emotion_${emotion}`, motion: speaking ? 'pulse' : 'flow' } }));
+  }
   const announcement = document.querySelector('#voice-announcement');
   const retention = new CaptionRetention(() => {
     transcript.replaceChildren();
@@ -31,7 +29,7 @@ export function mountVoice() {
       announcement.textContent = '';
     }
     errorBox.textContent = '';
-    elapsed.textContent = '00:00';
+
     previousFinal = '';
     for (const id of ['voice-age', 'voice-gender', 'voice-emotion', 'voice-speaker']) document.getElementById(id).textContent = '—';
   }
@@ -41,21 +39,14 @@ export function mountVoice() {
       const voiceMode = session.active || state === 'done' || state === 'error';
       sideReadout.dataset.mode = voiceMode ? 'voice' : 'render';
       sideReadout.setAttribute('aria-label', voiceMode ? '实时语音特征估计' : '实时渲染信息');
-      status.textContent = STATES[state];
-      toggle.textContent = ['requesting', 'connecting'].includes(state) ? '取消连接' : state === 'finalizing' ? '确认中…' : ['listening', 'speaking', 'waiting'].includes(state) ? '结束识别' : '开启语音';
-      toggle.disabled = state === 'finalizing';
-      toggle.setAttribute('aria-pressed', String(['listening', 'speaking', 'waiting'].includes(state)));
-      clear.disabled = session.active;
+      if (state === 'connecting') { reset({ keepCaption: true }); retention.beginTurn(); }
+      if (state === 'armed') { permission.hidden = true; errorBox.textContent = ''; }
+      if (state === 'done') retryTimer = setTimeout(activate, 400);
     },
-    onLevel(level) { panel.style.setProperty('--voice-level', level.toFixed(3)); },
-    onCountdown(seconds) {
-      const text = seconds === null ? '静音 10 秒 · 自动结束' : `${seconds} 秒后结束 · 说话即可继续`;
-      if (countdown.textContent !== text) countdown.textContent = text;
-    },
-    onSpeech(speaking) {
-      window.dispatchEvent(new CustomEvent('ring:set-state', { detail: { state: 'normal', motion: speaking ? 'pulse' : 'flow' } }));
-    },
-    onError(message) { errorBox.textContent = message; },
+    onGesture() { permission.hidden = false; permission.textContent = '允许麦克风 · 自动感知'; },
+    onLevel() {},
+    onSpeech(value) { speaking = value; updateRing(); },
+    onError(message) { blocked = true; errorBox.textContent = message; permission.hidden = false; permission.textContent = '重试语音感知'; },
     onResult(result) {
       const utterances = Array.isArray(result.utterances) ? result.utterances : [];
       const text = typeof result.text === 'string' ? result.text : '';
@@ -84,10 +75,7 @@ export function mountVoice() {
       document.querySelector('#voice-gender').textContent = ({ male: '男声', female: '女声' })[attributes.gender] || pending;
       document.querySelector('#voice-emotion').textContent = EMOTIONS[attributes.emotion] || pending;
       document.querySelector('#voice-speaker').textContent = attributes.speaker === null || attributes.speaker === undefined ? '—' : `S${attributes.speaker}`;
-      if (Number.isFinite(result.duration)) {
-        const seconds = Math.floor(result.duration / 1000);
-        elapsed.textContent = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
-      }
+      if (Object.hasOwn(EMOTIONS, attributes.emotion)) { emotion = attributes.emotion; updateRing(); }
       const finalText = result.final ? text : utterances.filter(utterance => utterance.definite).map(utterance => utterance.text).join('');
       if (finalText && finalText !== previousFinal) {
         document.querySelector('#voice-announcement').textContent = finalText;
@@ -95,19 +83,44 @@ export function mountVoice() {
       }
     },
   });
-  function onToggle() {
-    if (session.active) session.stop();
-    else { reset({ keepCaption: true }); retention.beginTurn(); session.start(); }
+  async function activate() {
+    if (disposed || blocked || ttsPlaying || !foreground() || session.active) return;
+    await session.start();
   }
-  function onClear() { if (!session.active) reset(); }
+  function onForeground() {
+    clearTimeout(retryTimer);
+    if (!foreground()) session.destroy();
+    else activate();
+  }
+  function unlock() {
+    blocked = false;
+    // Resume suspended audio on a trusted gesture when browser policy requires it.
+    session.context?.resume().catch(() => {});
+    activate();
+  }
   function onPageHide() { session.destroy(); retention.clear(); transcript.replaceChildren(); }
-  toggle.addEventListener('click', onToggle);
-  clear.addEventListener('click', onClear);
+  function onTtsStart() { ttsPlaying = true; clearTimeout(retryTimer); session.destroy(); }
+  function onTtsEnd() { ttsPlaying = false; activate(); }
+  permission.addEventListener('click', unlock);
+  document.addEventListener('pointerdown', unlock, { once: true });
+  document.addEventListener('keydown', unlock, { once: true });
+  document.addEventListener('visibilitychange', onForeground);
+  window.addEventListener('focus', onForeground);
+  window.addEventListener('blur', onForeground);
   window.addEventListener('pagehide', onPageHide);
+  window.addEventListener('tts:start', onTtsStart);
+  window.addEventListener('tts:end', onTtsEnd);
+  activate();
   return () => {
-    session.destroy();
-    retention.clear();
-    toggle.removeEventListener('click', onToggle); clear.removeEventListener('click', onClear);
+    disposed = true; clearTimeout(retryTimer); session.destroy(); retention.clear();
+    permission.removeEventListener('click', unlock);
+    document.removeEventListener('pointerdown', unlock);
+    document.removeEventListener('keydown', unlock);
+    document.removeEventListener('visibilitychange', onForeground);
+    window.removeEventListener('focus', onForeground);
+    window.removeEventListener('blur', onForeground);
     window.removeEventListener('pagehide', onPageHide);
+    window.removeEventListener('tts:start', onTtsStart);
+    window.removeEventListener('tts:end', onTtsEnd);
   };
 }

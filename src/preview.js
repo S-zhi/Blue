@@ -17,6 +17,18 @@ export const PRESETS = {
   },
 };
 
+// Emotion palettes affect appearance only; they are not safety assessments.
+const emotionColors = {
+  neutral: ['平静', '#79caff', '#85ceff', '#4f9df9', [.003,.018,.095], [.006,.12,.44], [.07,.60,1.55], [.035,.23,.53]],
+  happy: ['开心', '#75f3cf', '#b3ffe2', '#32cca4', [.002,.045,.03], [.008,.34,.20], [.12,1.5,.8], [.03,.53,.32]],
+  sad: ['悲伤', '#a49aef', '#c9c4ff', '#7561cc', [.022,.01,.08], [.12,.055,.34], [.55,.32,1.3], [.23,.13,.49]],
+  angry: ['生气', '#ff8975', '#ffc2ac', '#ed6650', [.08,.008,.003], [.44,.055,.018], [1.5,.24,.09], [.53,.10,.04]],
+  surprise: ['惊讶', '#ffdf87', '#fff0b9', '#eac45b', [.06,.035,.003], [.4,.25,.02], [1.5,1.1,.19], [.5,.34,.06]],
+};
+for (const [emotion, [name, accent, glass, absorption, deep, mid, light, edge]] of Object.entries(emotionColors)) {
+  PRESETS[`emotion_${emotion}`] = { ...PRESETS.normal, name, accent, glass, absorption, deep, mid, light, edge };
+}
+
 export const ACTIONS = {
   flow: { name: '光带环流', value: 0 },
   pulse: { name: '呼吸脉冲', value: 1 },
