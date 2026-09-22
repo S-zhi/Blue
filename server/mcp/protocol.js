@@ -1,6 +1,6 @@
 import { McpError, MCP_ERROR } from './errors.js';
 
-export const MCP_PROTOCOL_VERSION = '2025-06-18';
+export const MCP_PROTOCOL_VERSION = '2025-11-25';
 
 export function createMcpDispatcher(registry, { serverName = 'blue-agent-mcp', serverVersion = '0.1.0' } = {}) {
   return async function dispatch(message, context = {}) {

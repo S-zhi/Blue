@@ -4,8 +4,10 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const root = realpathSync(fileURLToPath(new URL('../', import.meta.url)));
-const expectedHead = '9ceab5d3ae7ef9fa16f0c9d7b9fe99a057e2f8c8';
+const expectedHead = '8f7a7196ae213ff404cf41cd02397424ab76cd97';
 const expectedIncoming = '5b3000936ed75a05273f1a892a1526d7375f1911';
+const helperFiles = ['merge-review/README.md', 'merge-review/merge-voice.mjs'];
+const sourcePaths = ['.', ...helperFiles.map(file => ':(exclude)' + file)];
 const files = [
   ".env.example",
   "README.md",
@@ -29,13 +31,18 @@ function run(command, args) {
 }
 try {
   if (git('branch', '--show-current') !== 'codex/vedio') throw new Error('请切换到 codex/vedio；脚本不会自动切换分支。');
-  if (git('rev-parse', 'HEAD') !== expectedHead || git('rev-parse', 'codex/voice') !== expectedIncoming) {
-    throw new Error('分支提交已变化，请重新核查解决方案，禁止套用旧结果。');
+  if (git('rev-parse', 'codex/voice') !== expectedIncoming) {
+    throw new Error('待合入分支提交已变化，请重新核查解决方案，禁止套用旧结果。');
+  }
+  git('merge-base', '--is-ancestor', expectedHead, 'HEAD');
+  const changedSources = git('diff', '--name-only', expectedHead, 'HEAD', '--', ...sourcePaths);
+  if (changedSources) {
+    throw new Error('当前分支的业务代码或解决文件已变化，请重新核查：\n' + changedSources);
   }
   const inProgress = spawnSync('git', ['rev-parse', '-q', '--verify', 'MERGE_HEAD'], { cwd: root, encoding: 'utf8' });
   if (inProgress.status === 0) throw new Error('已有合并正在进行；为保护手工修改，脚本不会覆盖，请先处理该次合并。');
-  const status = git('status', '--porcelain=v1', '--untracked-files=normal');
-  const changes = status.split('\n').filter(Boolean).filter(line => line !== '?? merge-review/');
+  const status = git('status', '--porcelain=v1', '--untracked-files=normal', '--', ...sourcePaths);
+  const changes = status.split('\n').filter(Boolean);
   if (changes.length) throw new Error('工作区存在其他修改，请先保留/提交这些修改再执行。');
   const content = new Map(files.map(file => [file, readFileSync(new URL('./resolved/' + file, import.meta.url), 'utf8')]));
   for (const [file, text] of content) {
@@ -58,10 +65,10 @@ try {
   run('npm', ['test']);
   run('npm', ['run', 'build']);
   run('git', ['diff', '--check']);
-  run('git', ['add', '--', ...files]);
+  run('git', ['add', '--', ...files, ...helperFiles]);
   if (git('diff', '--name-only', '--diff-filter=U')) throw new Error('仍有未解决冲突，未提交。');
   run('git', ['commit', '-m', 'Merge codex/voice into codex/vedio preserving TTS and Agent/MCP']);
-  console.log('本地合并完成：' + git('rev-parse', '--short', 'HEAD') + '；未推送远程。merge-review/ 是未提交的辅助文件。');
+  console.log('本地合并完成：' + git('rev-parse', '--short', 'HEAD') + '；未推送远程。已包含合并辅助脚本和说明更新。');
 } catch (error) {
   console.error(error.message);
   process.exitCode = 1;

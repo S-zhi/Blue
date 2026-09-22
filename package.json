@@ -10,7 +10,10 @@
     "start": "node server/start.js",
     "test": "node --test test/*.test.js",
     "test:tts:live": "node scripts/tts-smoke.js",
-    "test:tts:play": "node scripts/tts-smoke.js --play"
+    "test:tts:play": "node scripts/tts-smoke.js --play",
+    "mcp:demo": "node server/mcp/demo.js",
+    "agent:demo": "node server/agent/demo.js",
+    "agent:check": "node server/agent/check.js"
   },
   "dependencies": {
     "three": "^0.167.1",

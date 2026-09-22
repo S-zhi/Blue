@@ -32,3 +32,7 @@ See [docs/voice-asr.md](docs/voice-asr.md) for architecture, configuration, VAD 
 ## Streaming voice synthesis
 
 The BFF also includes the bidirectional Doubao TTS protocol adapter and streams 24 kHz PCM to the browser. Configure `DOUBAO_TTS_SPEAKER`, then call `window.blueTts.speak(text)` from a user gesture. The TTS capability is intentionally standalone for now and is not automatically connected to the ASR loop. See [docs/voice-tts.md](docs/voice-tts.md).
+
+## Agent + MCP
+
+The server includes an OpenAI-compatible custom-model Agent and a single MCP gateway tool. Run `npm run mcp:demo` to verify the Demo MCP client/server path, or `npm run agent:demo -- "请读取 MCP 中的演示密钥"` to exercise the configured model. See `docs/agent-mcp.md` for architecture, registration rules and production migration.

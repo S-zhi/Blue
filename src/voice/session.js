@@ -3,8 +3,8 @@ import { Packetizer, VoiceActivityDetector } from './audio-core.js';
 import { TranscriptDeadline } from './timing.js';
 
 export class SpeechSession {
-  constructor({ onState, onLevel, onSpeech, onResult, onError, onCountdown = () => {}, onGesture = () => {} }) {
-    Object.assign(this, { onState, onLevel, onSpeech, onResult, onError, onCountdown, onGesture });
+  constructor({ onState, onLevel, onSpeech, onResult, onError, onCountdown = () => {}, onGesture = () => {}, onMicrophone = () => {} }) {
+    Object.assign(this, { onState, onLevel, onSpeech, onResult, onError, onCountdown, onGesture, onMicrophone });
     this.state = 'idle'; this.generation = 0;
   }
   get active() { return ['armed', 'requesting', 'connecting', 'listening', 'speaking', 'waiting', 'finalizing'].includes(this.state); }
@@ -22,6 +22,7 @@ export class SpeechSession {
     this.healthTimer = setTimeout(() => this.abortController?.abort(), 8000);
     try {
       if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.AudioWorkletNode) {
+        this.onMicrophone(false);
         throw new Error('请使用支持 AudioWorklet 的浏览器，并通过 localhost 或 HTTPS 打开页面。');
       }
       const response = await fetch('/api/asr/health', { signal: this.abortController.signal, cache: 'no-store' });
@@ -35,7 +36,8 @@ export class SpeechSession {
       });
       if (!this.current(token)) { stream.getTracks().forEach(track => track.stop()); return; }
       this.stream = stream;
-      for (const track of stream.getTracks()) track.onended = () => this.fail('麦克风已断开或权限被撤销。');
+      this.onMicrophone(true);
+      for (const track of stream.getTracks()) track.onended = () => { this.onMicrophone(false); this.fail('麦克风已断开或权限被撤销。'); };
       const context = new AudioContext({ latencyHint: 'interactive' });
       this.context = context;
       if (context.state === 'suspended') this.onGesture();
@@ -76,6 +78,7 @@ export class SpeechSession {
       this.change('armed');
     } catch (error) {
       if (!this.current(token)) return;
+      if (['NotAllowedError', 'NotFoundError', 'NotReadableError', 'OverconstrainedError', 'SecurityError'].includes(error.name)) this.onMicrophone(false);
       this.fail(error.name === 'NotAllowedError' ? '请在浏览器中允许麦克风权限。' : error.message || '无法启动语音感知。');
     }
   }
