@@ -11,7 +11,7 @@
       <div class="grain" aria-hidden="true"></div>
       <header class="topbar">
         <a class="mark" href="/" aria-label="Blue Interface 首页"><span class="mark-dot"></span> BLUE / 01</a>
-        <div class="top-meta"><span>GLASS INTERFACE</span><span class="signal"><i></i> LIVE RENDER</span></div>
+        <div class="top-meta"><button id="voice-permission" type="button" hidden>允许麦克风 · 自动感知</button><span id="voice-error" role="status"></span><span>GLASS INTERFACE</span><span class="signal"><i></i> LIVE RENDER</span></div>
       </header>
       <main class="dashboard" aria-label="Blue 大屏">
         <section class="hero" aria-labelledby="hero-title">
@@ -48,19 +48,34 @@
           <p class="telemetry-note">帧率由当前画面实时采样</p>
         </section>
         <section class="voice-panel" id="voice-panel" data-state="idle" aria-label="实时语音识别">
-          <div class="voice-header"><span class="voice-indicator" aria-hidden="true"></span><span id="voice-status" role="status">语音待命</span><span class="voice-protocol">VOICE / STREAM</span><time id="voice-duration">00:00</time></div>
-          <div class="voice-level" aria-hidden="true"><span></span></div>
-          <div class="voice-transcript empty" id="voice-transcript">开启语音，让想法实时浮现。</div>
+          <div class="voice-transcript" id="voice-transcript"></div>
           <span id="voice-announcement" class="sr-only" aria-live="polite"></span>
-          <div class="voice-actions"><button type="button" id="voice-toggle" aria-pressed="false">开启语音</button><button type="button" id="voice-clear">清空字幕</button><span id="voice-countdown">静音 10 秒 · 自动结束</span></div>
-          <p class="voice-error" id="voice-error" role="alert"></p>
-          <p class="voice-notice">开启后音频发送至豆包，单次最长 2 分钟。停顿 10 秒自动结束，字幕保留 30 秒。</p>
         </section>
         <div class="specimen-label"><span>01 / OPTICAL CORE</span><small>REFRACTIVE GLASS · INNER LIGHT CHANNEL</small></div>
       </main>
       <footer class="footer"><span>BLUE / ORBITAL SYSTEM</span><span class="footer-center">WEBGL · REALTIME</span><span>LOCAL <time id="local-time">—</time></span></footer>
       <div class="crosshair crosshair-a" aria-hidden="true"></div><div class="crosshair crosshair-b" aria-hidden="true"></div>
+      <button class="agent-launch" id="agent-launch" type="button" aria-haspopup="dialog" hidden><span aria-hidden="true">⌘</span> 文字输入 <small>MIC / OFFLINE</small></button>
+      <dialog class="agent-dialog" id="agent-dialog" aria-labelledby="agent-title">
+        <header class="agent-heading"><div><small>BLUE / MCP LINK</small><h2 id="agent-title">文字输入</h2></div><button id="agent-close" type="button" aria-label="关闭对话">×</button></header>
+        <p class="agent-placeholder">麦克风当前不可用。指令将直接交给 Agent，回答显示在字幕区。</p>
+        <form id="agent-form">
+          <label class="sr-only" for="agent-input">输入指令</label>
+          <textarea id="agent-input" rows="3" maxlength="10000" required placeholder="例如：请通过 MCP 获取演示密钥"></textarea>
+          <div class="agent-form-actions"><button id="agent-send" type="submit">执行 →</button></div>
+          <p id="agent-status" role="status"></p>
+        </form>
+      </dialog>
     </div>
+    <script>
+      if (location.protocol === 'file:') {
+        const note = document.createElement('p');
+        note.style.cssText = 'position:fixed;top:20px;left:20px;z-index:99;background:#081523;color:#c5eaff;padding:20px;font:16px sans-serif';
+        note.append('此页面需要开发服务，请运行 npm run dev 后打开 ');
+        const link = document.createElement('a'); link.href = 'http://localhost:5173/'; link.textContent = 'http://localhost:5173/'; link.style.color = '#79caff'; note.append(link); document.body.append(note);
+      }
+    </script>
     <script type="module" src="/src/main.js"></script>
+    <script type="module" src="/src/agent-ui.js"></script>
   </body>
 </html>

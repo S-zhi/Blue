@@ -1,27 +1,14 @@
-export const END_SILENCE_MS = 10000;
 export const CAPTION_HOLD_MS = 30000;
-
-// Count captured audio time, not rendering frames or cloud response latency.
-export class TurnEndDetector {
-  constructor(silenceMs = END_SILENCE_MS) {
-    this.silenceMs = silenceMs;
-    this.started = false;
-    this.quietMs = 0;
-    this.ended = false;
+export class TranscriptDeadline {
+  constructor(onEnd, delay = 10000) { this.onEnd = onEnd; this.delay = delay; this.text = ''; }
+  start() { this.clear(); this.text = ''; this.running = true; this.arm(); }
+  arm() { clearTimeout(this.timer); this.timer = setTimeout(() => { this.running = false; this.onEnd(); }, this.delay); }
+  update(text) {
+    if (!this.running || typeof text !== 'string' || !text.trim() || text === this.text) return;
+    this.text = text;
+    this.arm();
   }
-  update(rms, durationMs, activity) {
-    if (activity.speaking) this.started = true;
-    if (!this.started || this.ended) return { waiting: false, remainingMs: null, ended: this.ended };
-    // Cancel a pending ending on the first audible frame; the separate VAD
-    // still requires 60 ms before switching the ring to its speaking pulse.
-    this.quietMs = rms >= activity.stopThreshold ? 0 : this.quietMs + durationMs;
-    this.ended = this.quietMs >= this.silenceMs;
-    return {
-      waiting: this.quietMs >= 600,
-      remainingMs: Math.max(0, this.silenceMs - this.quietMs),
-      ended: this.ended,
-    };
-  }
+  clear() { clearTimeout(this.timer); this.running = false; }
 }
 
 export class CaptionRetention {
