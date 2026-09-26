@@ -165,17 +165,16 @@ function resize() {
   camera.aspect = width / height;
   // Keep the complete ring in frame, including portrait layouts.
   camera.position.z = Math.max(9.5, 2.35 / (Math.tan(THREE.MathUtils.degToRad(19)) * camera.aspect));
-  ring.position.set(width <= 760 ? 0 : .34, width <= 760 ? 1.95 : 0, 0);
   const chatting = document.querySelector('#app').classList.contains('has-conversation');
-  ring.scale.setScalar(chatting ? .42 : 1);
-  if (chatting) {
-    const halfHeight = camera.position.z * Math.tan(THREE.MathUtils.degToRad(19));
-    ring.position.y = halfHeight * (width <= 760 ? .64 : .56);
-  }
+  // Conversation mode centers the optical core; the initial dashboard keeps its offset composition.
+  ring.position.set(width <= 760 ? 0 : .34, width <= 760 ? 1.95 : 0, 0);
+  if (chatting) ring.position.set(0, 0, 0);
+  // The optical core keeps its original physical scale in every interaction state.
+  ring.scale.setScalar(1);
   camera.updateProjectionMatrix();
   camera.updateMatrixWorld();
   const center = ring.position.clone().project(camera);
-  const edge = ring.position.clone().add(new THREE.Vector3(1.3 * ring.scale.x, 0, 0)).project(camera);
+  const edge = ring.position.clone().add(new THREE.Vector3(1.95 * ring.scale.x, 0, 0)).project(camera);
   const control = document.querySelector('#voice-toggle');
   control.style.left = `${(center.x + 1) * width / 2}px`;
   control.style.top = `${(1 - center.y) * height / 2}px`;

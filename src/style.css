@@ -76,3 +76,76 @@
 #conversation-latest{align-self:center;border:1px solid #598caf66;background:#081321;color:#c4e4f8;padding:7px 13px;font-size:10px;cursor:pointer}#conversation-latest[hidden]{display:none}
 @media(max-width:1050px) and (min-width:761px){.has-conversation .voice-panel{left:32%;right:24%}}
 @media(max-width:760px){.has-conversation .hero{opacity:0;visibility:hidden}.has-conversation .voice-panel{left:24px;right:24px;top:340px;bottom:420px;padding:0;width:auto}.has-conversation .voice-toggle{font-size:10px}.has-conversation .dashboard .hud-readout{top:auto;bottom:95px}.conversation-heading{font-size:9px}}
+
+/* Conversation redesign: the full-size ring remains the anchor while copy sits in a quiet rail. */
+.has-conversation .hero{opacity:0;visibility:hidden;pointer-events:none}
+.has-conversation .hud-readout{top:12%;right:5vw;width:166px;padding:14px 0 0 15px;opacity:.9}
+.has-conversation .hud-readout:before{top:64px;height:28px}
+.has-conversation .hud-readout .readout-label{font-size:9px}
+.has-conversation .hud-readout .readout-main{margin-top:-7px}
+.has-conversation .hud-readout .readout-main strong{font-size:53px}
+.has-conversation .hud-readout .status-readout{margin:11px 0 10px}
+.has-conversation .hud-readout .status-readout p{font-size:10px}
+.has-conversation .hud-readout .hud-detail{font-size:8px;line-height:2.35}
+.has-conversation .hud-readout .telemetry-note{font-size:7px;margin-top:10px}
+.has-conversation .voice-panel{left:7vw;right:auto;top:20%;bottom:13%;width:min(360px,27vw);padding:0 18px 0 0;border-right:1px solid #759ab52b}
+.has-conversation .conversation-heading{padding:0 0 13px;border-bottom:1px solid #739dbc4a;color:#91b7cf;font-size:9px;letter-spacing:.16em}
+.has-conversation .conversation-heading>span:last-child{font-size:8px;color:#63849b}
+.has-conversation .voice-transcript{padding:20px 16px 28px 0}
+.has-conversation .conversation-message{margin-bottom:22px;padding-left:12px;border-left:1px solid #4a789633}
+.has-conversation .conversation-message:last-child{border-left-color:var(--state-accent)}
+.has-conversation .conversation-message small{font-size:8px;color:#6f99b4;letter-spacing:.16em;margin-bottom:7px}
+.has-conversation .conversation-message p{font-size:clamp(14px,1.05vw,17px);line-height:1.75;color:#a8cde4}
+.has-conversation .conversation-message[data-role="assistant"] p{color:#e4f3ef}
+.has-conversation .conversation-message[data-role="error"] p{color:#f3b3ab}
+.has-conversation .specimen-label{display:block;left:50%;bottom:6%;opacity:.72}
+.has-conversation .specimen-label>span{font-size:7px}
+.has-conversation .specimen-label small{font-size:5px;margin-top:8px}
+.has-conversation .footer-center{color:#668aa3}
+@media(max-width:1050px) and (min-width:761px){
+  .has-conversation .voice-panel{left:5vw;width:250px}
+  .has-conversation .hud-readout{right:4%;width:150px}
+}
+@media(max-width:760px){
+  .has-conversation .voice-panel{left:24px;right:24px;top:345px;bottom:270px;width:auto;padding:0;border-right:0}
+  .has-conversation .voice-transcript{padding:17px 0 24px}
+  .has-conversation .conversation-message{padding-left:10px;margin-bottom:18px}
+  .has-conversation .conversation-message p{font-size:15px;line-height:1.7}
+  .has-conversation .hud-readout{top:auto;right:24px;bottom:84px;width:150px;padding-left:12px}
+  .has-conversation .specimen-label{display:none}
+}
+
+/* Single-anchor composition: clear the side rails and let the ring own the frame. */
+.has-conversation .hero,.has-conversation .hud-readout,.has-conversation .specimen-label{display:none!important}
+.has-conversation::before{content:'';position:absolute;z-index:1;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 50%,transparent 0 25%,#02050b20 34%,#02050bbf 64%,#02050bf2 100%);}
+.has-conversation .voice-panel{left:50%;right:auto;top:auto;bottom:7%;width:min(720px,78vw);transform:translateX(-50%);padding:0;border:0;text-align:center}
+.has-conversation .conversation-heading{justify-content:center;border:0;padding-bottom:12px;color:#7fa6bd}
+.has-conversation .conversation-heading>span:last-child{display:none}
+.has-conversation .voice-transcript{text-align:center;padding:10px 0 20px;max-height:38vh}
+.has-conversation .conversation-message{max-width:680px;margin:0 auto 24px;padding:0!important;border:0!important}
+.has-conversation .conversation-message p{font-size:clamp(16px,1.35vw,22px);line-height:1.75}
+@media(max-width:1050px) and (min-width:761px){.has-conversation .voice-panel{width:min(620px,72vw)}}
+@media(max-width:760px){
+  .has-conversation::before{background:radial-gradient(circle at 50% 43%,transparent 0 31%,#02050b2c 42%,#02050bc7 72%,#02050bf4 100%)}
+  .has-conversation .voice-panel{left:24px;right:24px;top:auto;bottom:76px;width:auto;transform:none}
+  .has-conversation .voice-transcript{max-height:24vh;padding:8px 0 15px}
+  .has-conversation .conversation-message{margin-bottom:18px}
+  .has-conversation .conversation-message p{font-size:15px;line-height:1.7}
+}
+
+/* Full-page reading layer over the animated optical core. */
+.has-conversation::before{z-index:2;background:rgba(2,5,11,.3);}
+.has-conversation .voice-panel{inset:90px 6vw 100px;transform:none;width:auto;max-width:none;text-align:center;}
+.has-conversation .conversation-heading{justify-content:center;border-bottom:1px solid #739dbc30;padding-bottom:18px;}
+.has-conversation .conversation-heading>span:last-child{display:none;}
+.has-conversation .voice-transcript{max-height:none;min-height:0;text-align:center;padding:28px 24px;}
+.has-conversation .conversation-message{max-width:900px;margin:0 auto 32px;padding:0;}
+.has-conversation .conversation-message p{font-family:'PingFang SC','Microsoft YaHei',sans-serif;font-size:clamp(17px,1.5vw,25px);line-height:1.85;text-shadow:0 2px 12px #02050b;}
+.has-conversation .voice-toggle{top:auto!important;left:50%!important;bottom:24px;width:auto!important;height:48px!important;transform:translateX(-50%);border-radius:24px;flex-direction:row;padding:0 24px;background:#081321e6;border:1px solid #598caf66;}
+.has-conversation .crosshair,.has-conversation .footer{display:none;}
+@media(max-width:760px){
+  #app.has-conversation{height:100svh;min-height:560px;}
+  .has-conversation .voice-panel{inset:78px 24px 96px;width:auto;transform:none;}
+  .has-conversation .voice-transcript{max-height:none;padding:20px 8px;}
+  .has-conversation .conversation-message p{font-size:17px;}
+}

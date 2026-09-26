@@ -26,16 +26,24 @@ export class AudioCaptions {
       this.currentSentence = null;
     }
   }
+  complete(duration) { this.duration = duration; }
+  reveal(text, progress) {
+    const characters = [...text];
+    return characters.slice(0, Math.min(characters.length, Math.floor(Math.max(0, progress) * characters.length) + 1)).join('');
+  }
   at(seconds) {
     if (seconds === null) return '';
     // Voices without timestamp support retain sentence-level playback captions.
     if (!this.words.length) {
-      if (!this.sentences.some(sentence => sentence.text)) return this.text;
+      if (!this.sentences.some(sentence => sentence.text)) return this.duration > 0 ? this.reveal(this.text, seconds / this.duration) : '';
       let offset = 0;
       for (const sentence of this.sentences) {
         if (sentence.start > seconds) break;
         const found = this.text.indexOf(sentence.text, offset);
-        if (sentence.text && found >= 0) offset = found + sentence.text.length;
+        if (sentence.text && found >= 0) {
+          if (seconds < sentence.end) return this.text.slice(0, found) + this.reveal(sentence.text, (seconds - sentence.start) / (sentence.end - sentence.start));
+          offset = found + sentence.text.length;
+        }
       }
       return this.text.slice(0, offset);
     }

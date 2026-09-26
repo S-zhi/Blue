@@ -183,7 +183,7 @@ test('untimed voices display text only when the buffered audio starts; cancellat
   assert.deepEqual(captions, []);
   contexts[0].currentTime = .04;
   await new Promise(resolve => setTimeout(resolve, 35));
-  assert.deepEqual(captions, ['无时间戳']);
+  assert.deepEqual(captions, ['无']);
   session.stop(); await rejected;
   await new Promise(resolve => setTimeout(resolve, 35));
   assert.equal(captions.length, 1);
@@ -208,14 +208,26 @@ test('sentence-only voices release each sentence at its PCM boundary', async t =
   assert.equal(contexts[0].sources.length, 1);
   contexts[0].currentTime = .1;
   await new Promise(resolve => setTimeout(resolve, 35));
-  assert.deepEqual(captions, ['第一句。']);
+  assert.deepEqual(captions, ['第']);
   socket.json({ type: 'sentence', boundary: 'start', text: '第二句。', audioBytes: 48000 });
   socket.pcm(new Array(48000).fill(64));
   socket.json({ type: 'sentence', boundary: 'end', text: '', audioBytes: 96000 });
   socket.json({ type: 'done', audioBytes: 96000 });
-  assert.equal(captions.at(-1), '第一句。');
+  assert.equal(captions.at(-1), '第');
   contexts[0].currentTime = 1.1;
   await new Promise(resolve => setTimeout(resolve, 35));
-  assert.equal(captions.at(-1), '第一句。第二句。');
+  assert.equal(captions.at(-1), '第一句。第');
   contexts[0].sources.forEach(source => source.end()); await pending;
+});
+
+test('playback captions use the audible device clock instead of the render-ahead clock', async () => {
+  const context = new AudioContext(); await context.resume();
+  context.getOutputTimestamp = () => ({ contextTime: .02 });
+  const player = new PcmStreamPlayer(context, 24000);
+  player.append(new Uint8Array(48000).buffer);
+  context.currentTime = .4;
+  assert.equal(player.playedSeconds, null);
+  context.getOutputTimestamp = () => ({ contextTime: .14 });
+  assert.ok(Math.abs(player.playedSeconds - .1) < .0001);
+  player.stop();
 });

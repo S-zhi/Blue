@@ -45,7 +45,11 @@ export class PcmStreamPlayer {
     source.start(start); this.nextStart = start + audio.duration;
   }
   get playedSeconds() {
-    const now = this.context.currentTime;
+    // Read the audible output clock when supported, compensating device latency.
+    const timestamp = this.context.getOutputTimestamp?.();
+    const now = timestamp && Number.isFinite(timestamp.contextTime) && timestamp.contextTime > 0
+      ? timestamp.contextTime
+      : Math.max(0, this.context.currentTime - (this.context.outputLatency || 0));
     if (!this.schedule.length || now < this.schedule[0].start) return null;
     let position = 0;
     for (const part of this.schedule) {
@@ -214,6 +218,7 @@ export class TtsSession {
                 if (!ready || run.providerDone) throw failure('PROTOCOL_ERROR', '语音合成结束事件顺序错误。');
                 if (message.audioBytes !== run.receivedBytes) throw failure('INVALID_AUDIO', '音频接收不完整，请重新播放。');
                 run.providerDone = true;
+                run.captions.complete(run.receivedBytes / (health.sampleRate * 2));
                 flushAudio();
                 const draining = run.player.drain();
                 deadline('PLAYBACK_TIMEOUT', '音频播放未完成，请检查浏览器音频权限。', Math.max(5000, (run.player.nextStart - run.context.currentTime) * 1000 + 5000));
