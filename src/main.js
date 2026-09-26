@@ -71,12 +71,26 @@ const colorTargets = {};
 const glassColorTarget = new THREE.Color(PRESETS.normal.glass);
 const absorptionTarget = new THREE.Color(PRESETS.normal.absorption);
 const colorFields = { uDeepColor: 'deep', uMidColor: 'mid', uLightColor: 'light', uEdgeColor: 'edge' };
+const COLOR_TRANSITION_SECONDS = 7;
+const colorTransition = {
+  elapsed: COLOR_TRANSITION_SECONDS,
+  starts: {},
+  glassStart: new THREE.Color(PRESETS.normal.glass),
+  absorptionStart: new THREE.Color(PRESETS.normal.absorption),
+};
+let glassMaterial;
 // State transitions remain available for future business data, without demo UI.
 export function setRingState(state = 'normal', motion = 'flow') {
   if (!Object.hasOwn(PRESETS, state) || !Object.hasOwn(ACTIONS, motion)) return false;
   const preset = PRESETS[state];
   targetPreset = preset;
   targetMotion = ACTIONS[motion].value;
+  for (const uniform of Object.keys(colorFields)) {
+    colorTransition.starts[uniform] = flowUniforms[uniform].value.clone();
+  }
+  colorTransition.glassStart.set(glassMaterial ? glassMaterial.color : PRESETS.normal.glass);
+  colorTransition.absorptionStart.set(glassMaterial ? glassMaterial.attenuationColor : PRESETS.normal.absorption);
+  colorTransition.elapsed = 0;
   glassColorTarget.set(preset.glass);
   absorptionTarget.set(preset.absorption);
   document.documentElement.style.setProperty('--state-accent', preset.accent);
@@ -100,7 +114,7 @@ const energyMaterial = new THREE.ShaderMaterial({
 const energyCore = new THREE.Mesh(annulus(1.81, 1.47, .04, .012), energyMaterial);
 energyCore.position.z = -.005;
 ring.add(energyCore);
-const glassMaterial = new THREE.MeshPhysicalMaterial({
+glassMaterial = new THREE.MeshPhysicalMaterial({
   color: PRESETS.normal.glass, metalness: 0, roughness: .028,
   transmission: 1, thickness: .12, ior: 1.46,
   attenuationColor: new THREE.Color(PRESETS.normal.absorption), attenuationDistance: 1.6,
@@ -222,15 +236,18 @@ let frame;
 function animate() {
   frame = requestAnimationFrame(animate);
   const delta = Math.min(clock.getDelta(), .05);
-  const blend = reducedMotion.matches ? 1 : 1 - Math.exp(-delta * 5);
-  currentSpeed = THREE.MathUtils.lerp(currentSpeed, targetPreset.speed, blend);
-  currentPulseHz = THREE.MathUtils.lerp(currentPulseHz, targetPreset.pulseHz, blend);
-  flowUniforms.uMotion.value = THREE.MathUtils.lerp(flowUniforms.uMotion.value, targetMotion, blend);
+  const motionBlend = reducedMotion.matches ? 1 : 1 - Math.exp(-delta * 5);
+  currentSpeed = THREE.MathUtils.lerp(currentSpeed, targetPreset.speed, motionBlend);
+  currentPulseHz = THREE.MathUtils.lerp(currentPulseHz, targetPreset.pulseHz, motionBlend);
+  flowUniforms.uMotion.value = THREE.MathUtils.lerp(flowUniforms.uMotion.value, targetMotion, motionBlend);
+  colorTransition.elapsed = Math.min(COLOR_TRANSITION_SECONDS, colorTransition.elapsed + delta);
+  const colorProgress = reducedMotion.matches ? 1 : colorTransition.elapsed / COLOR_TRANSITION_SECONDS;
+  const colorBlend = colorProgress * colorProgress * (3 - 2 * colorProgress);
   for (const uniform of Object.keys(colorFields)) {
-    flowUniforms[uniform].value.lerp(colorTargets[uniform], blend);
+    flowUniforms[uniform].value.copy(colorTransition.starts[uniform]).lerp(colorTargets[uniform], colorBlend);
   }
-  glassMaterial.color.lerp(glassColorTarget, blend);
-  glassMaterial.attenuationColor.lerp(absorptionTarget, blend);
+  glassMaterial.color.copy(colorTransition.glassStart).lerp(glassColorTarget, colorBlend);
+  glassMaterial.attenuationColor.copy(colorTransition.absorptionStart).lerp(absorptionTarget, colorBlend);
   if (!reducedMotion.matches) {
     flowUniforms.uTime.value += delta;
     // Integrating the speed preserves phase when changing states rapidly.

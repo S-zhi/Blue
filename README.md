@@ -1,56 +1,83 @@
-# Blue / Glass Interface
+# BLUE / Glass Interface
 
-A Three.js big-screen display built around a stationary ice-blue glass ring, the large THE BLUE RING title, and a floating information HUD.
+[简体中文](#中文) · [English](#english)
 
-The ring combines a transmissive shell, beveled highlights, and an internal light channel. Layered curved light-field surfaces, sweeping foreground contours, distant elliptical arcs, and sparse drifting particles provide depth without rotating the ring. The curves themselves continuously bend, rise, and drift at different speeds, while blue-silver highlights travel along them; no straight grid or scanning bars remain. The right-hand HUD shows sampled rendering FPS, frame-rate history, session duration, and optical material information; the footer shows local time. FPS is measured from rendered frames rather than simulated. There are no state-selection or motion-preview controls on the default screen.
+## 中文
 
-## Retained interaction support
+### 快速开始
 
-`src/preview.js` exports `PRESETS`, `ACTIONS`, `HUD_OPTIONS`, and `createHudOptions`. The triangle/square/circle/cross choice style remains available as an opt-in component and is not mounted by default. Pass a container, an options list, and an `onSelect` callback when a future business feature needs choices. The returned controller supports `setSelected(id)` and `destroy()`. Selection also emits a bubbling `ring:option-select` event containing the selected id. No global numeric shortcuts are registered.
-
-The existing normal/risk/critical colors and flow/pulse modes remain available through the exported `setRingState(state, motion)` function in `src/main.js`, or a `ring:set-state` window event with `{ state, motion }` in its detail. Invalid preset names are rejected. The default is the normal blue ring with flowing light. Reduced-motion preferences freeze scene animation.
-
-## Development
+BLUE 是一个实时语音交互与光环展示系统。启动后，点击页面中央圆环开始语音对话；系统将识别语音、把最终内容交给 Agent 处理，并在界面中展示对话和实时渲染状态。
 
 ```bash
 npm install
+cp .env.example .env   # 按需填写服务密钥
 npm run dev
-npm run build
 ```
 
-- `src/main.js`: scene, glass materials, state transitions, and live display metrics.
-- `src/shaders.js`: internal light channel and animated background.
-- `src/preview.js`: reusable state presets and opt-in interaction choices.
-- `src/style.css`: big-screen composition and reusable floating HUD styles.
-
-## Docker
-
-Build and run the frontend and Node BFF together:
+打开终端输出的本地地址。日常开发只需要保持 `npm run dev` 运行；此命令会启动 Vite，并同时挂载 Node BFF。只有在准备按生产方式验证或部署时，才需要先构建再启动：
 
 ```bash
-docker build -t blue-orbit .
-docker run --rm --init -p 3000:3000 --env-file .env blue-orbit
+npm run build
+npm start
 ```
 
-Open `http://localhost:3000`. Supply service credentials through `.env` at runtime;
-environment files are excluded from the build context. Omit `--env-file .env`
-to run without service credentials. The container listens on `0.0.0.0:3000`
-and runs as the non-root `node` user.
+需要 Node.js `>=22.14`。语音识别需要配置 `DOUBAO_API_KEY`；Agent 模型调用需要配置 `ASXS_CODE_API_KEY`。不配置语音密钥时，仍可启动和查看界面；完整对话需要相应服务可用。首次使用麦克风需在浏览器授权，非本机部署需使用 HTTPS。
 
-When deploying behind a domain, set `ASR_ALLOWED_ORIGINS` and
-`TTS_ALLOWED_ORIGINS` to the public origin (including scheme and port, if any).
-Use HTTPS for microphone access outside localhost.
+![BLUE 实时玻璃界面预览](docs/images/blue-interface.png)
 
-## Streaming voice recognition
+### 架构设计
 
-The screen now includes an explicit microphone button, live transcription, and per-utterance acoustic estimates (age, voice-gender label, emotion, speaker). Local voice activity switches the ring between flow and pulse. A same-origin BFF reads `DOUBAO_API_KEY` from `.env`; credentials never enter the browser.
+系统由浏览器展示层和同源 Node BFF 组成。浏览器负责 Three.js 场景、麦克风采集、语音活动检测、字幕与音频播放；BFF 代理 ASR/TTS 请求，并承载 Agent 与 MCP 调用。模型密钥保留在服务端环境变量中。
 
-See [docs/voice-asr.md](docs/voice-asr.md) for architecture, configuration, VAD thresholds, lifecycle, dependencies, and validation limits. `npm run dev` starts both the page and BFF; `npm run build && npm start` serves the built application with the BFF. The previous display and reusable HUD options remain available.
+![BLUE 系统模块架构图](docs/images/blue-architecture.png)
 
-## Streaming voice synthesis
+一次语音交互的主要路径是：浏览器采音并通过 BFF 请求 ASR，最终识别文本提交给 `/api/agent/run`；Agent 通过单一 MCP 网关发现并调用工具，结果返回界面字幕，并可由 TTS 播报。圆环和 HUD 展示实时渲染状态及对话反馈。MCP 未配置远端服务时使用本地 Demo Registry。
 
-The BFF also includes the bidirectional Doubao TTS protocol adapter and streams 24 kHz PCM to the browser. Configure `DOUBAO_TTS_SPEAKER`, then call `window.blueTts.speak(text)` from a user gesture. The TTS capability is intentionally standalone for now and is not automatically connected to the ASR loop. See [docs/voice-tts.md](docs/voice-tts.md).
+| 模块 | 职责 |
+| --- | --- |
+| Web 前端 | Three.js 场景、圆环状态、HUD、麦克风、字幕及音频播放 |
+| Node BFF | 静态文件服务、ASR/TTS 服务端连接、Agent API 与密钥边界 |
+| Agent | 调用 OpenAI-compatible 模型，并通过 MCP 网关执行工具 |
+| MCP | 注册与分发 Tools/Resources；支持本地 Demo 或远端 HTTP 服务 |
 
-## Agent + MCP
+进一步配置见 [语音识别](docs/voice-asr.md)、[语音合成](docs/voice-tts.md)、[Agent + MCP](docs/agent-mcp.md) 和 [GitHub Actions 语法教程](docs/github-actions-guide.md)。
 
-The server includes an OpenAI-compatible custom-model Agent and a single MCP gateway tool. Run `npm run mcp:demo` to verify the Demo MCP client/server path, or `npm run agent:demo -- "请读取 MCP 中的演示密钥"` to exercise the configured model. See `docs/agent-mcp.md` for architecture, registration rules and production migration.
+## English
+
+### Quick Start
+
+BLUE is a real-time voice interaction system with a live glass-ring display. Start the app and click the center ring to begin a voice session. The system transcribes speech, sends the final input to the Agent, and displays the conversation alongside live rendering metrics.
+
+```bash
+npm install
+cp .env.example .env   # add service credentials as needed
+npm run dev
+```
+
+Open the local URL printed in the terminal. For day-to-day development, keep `npm run dev` running; it starts Vite and mounts the Node BFF in the same process. Only build and start separately when verifying or deploying the production server:
+
+```bash
+npm run build
+npm start
+```
+
+Requires Node.js `>=22.14`. Set `DOUBAO_API_KEY` for speech recognition and `ASXS_CODE_API_KEY` for model-backed Agent requests. The interface can run without speech credentials, but a complete conversation requires the relevant services. Grant microphone access in the browser; use HTTPS when accessing the app remotely.
+
+![Preview of the BLUE glass interface](docs/images/blue-interface.png)
+
+### Architecture
+
+The system has a browser presentation layer and a same-origin Node BFF. The browser renders the Three.js scene, captures microphone audio, detects voice activity, and handles captions and audio playback. The BFF connects to ASR/TTS providers and hosts the Agent and MCP integration. Model credentials stay in server-side environment variables.
+
+![BLUE system module architecture](docs/images/blue-architecture.png)
+
+The main voice flow is: the browser captures audio and requests ASR through the BFF; the final transcript is sent to `/api/agent/run`; the Agent discovers and calls tools through one MCP gateway; results return to the captions and can be spoken by TTS. The ring and HUD show live rendering state and interaction feedback. A local Demo Registry is used when no remote MCP service is configured.
+
+| Module | Responsibility |
+| --- | --- |
+| Web frontend | Three.js scene, ring state, HUD, microphone, captions, and audio playback |
+| Node BFF | Static files, server-side ASR/TTS connections, Agent API, and credential boundary |
+| Agent | Calls an OpenAI-compatible model and executes tools through the MCP gateway |
+| MCP | Registers and dispatches Tools/Resources through a local demo or remote HTTP service |
+
+For service configuration, see [speech recognition](docs/voice-asr.md), [speech synthesis](docs/voice-tts.md), [Agent + MCP](docs/agent-mcp.md), and the [GitHub Actions syntax guide](docs/github-actions-guide.md).
